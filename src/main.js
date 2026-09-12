@@ -1136,22 +1136,15 @@ function generatePDF(clientId, ym){
 
   const filename = `${mesNome} - ${year} - ${c.nome}.pdf`;
 
-  // We're on a real static site now (not the sandboxed Claude Artifact
-  // preview from before), so the direct-download trick works normally —
-  // trigger it unconditionally so the file is always saved, since a blob:
-  // PDF opened in a standalone-app preview window sometimes has non-working
-  // toolbar buttons (zoom/download) in Safari. Still open the preview tab
-  // too, since it's handy to glance at the report right away.
-  const blob = doc.output('blob');
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = filename;
-  document.body.appendChild(a);
-  a.click();
-  a.remove();
-  window.open(url, '_blank');
-  setTimeout(()=> URL.revokeObjectURL(url), 60000);
+  // A single, standard download action — jsPDF's own save() — rather than
+  // our own blob+anchor combined with a second window.open(). Two triggered
+  // actions on the same click confuses Safari's "ask where to save" prompt
+  // (it stops offering the save dialog); doc.save() alone is the well-tested
+  // path that keeps that prompt working, including on the installed
+  // (Add to Dock) app. We're on a real static site now, not the sandboxed
+  // Claude Artifact preview from before, so this direct-download approach
+  // works normally here.
+  doc.save(filename);
 }
 
 /* ---------------- boot ---------------- */
