@@ -1136,15 +1136,21 @@ function generatePDF(clientId, ym){
 
   const filename = `${mesNome} - ${year} - ${c.nome}.pdf`;
 
-  // A single, standard download action — jsPDF's own save() — rather than
-  // our own blob+anchor combined with a second window.open(). Two triggered
-  // actions on the same click confuses Safari's "ask where to save" prompt
-  // (it stops offering the save dialog); doc.save() alone is the well-tested
-  // path that keeps that prompt working, including on the installed
-  // (Add to Dock) app. We're on a real static site now, not the sandboxed
-  // Claude Artifact preview from before, so this direct-download approach
-  // works normally here.
-  doc.save(filename);
+  // Not using doc.save() here — jsPDF's own bundled FileSaver sniffs for
+  // Safari and opens the PDF in a new window itself before the save dialog,
+  // which is exactly the extra preview window we don't want. Building the
+  // blob URL and downloading it ourselves, with nothing else triggered on
+  // the same click, is what makes Safari go straight to "where do you want
+  // to save this" using the filename below.
+  const blob = doc.output('blob');
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(()=> URL.revokeObjectURL(url), 60000);
 }
 
 /* ---------------- boot ---------------- */
