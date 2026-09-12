@@ -170,6 +170,16 @@ function fmtDateBR(iso){
 }
 function clientById(id){ return state.clients.find(c=>c.id===id); }
 function monthKey(year, m){ return `${year}-${m}`; }
+function initials(name){
+  const parts = (name||'').trim().split(/\s+/).filter(Boolean);
+  if(parts.length===0) return '?';
+  if(parts.length===1) return parts[0].slice(0,2).toUpperCase();
+  return (parts[0][0]+parts[1][0]).toUpperCase();
+}
+function chipClass(clientId){
+  const idx = state.clientOrder.indexOf(clientId);
+  return 'chip-' + (((idx<0?0:idx))%3);
+}
 
 function getVideos(clientId, ym){
   if(!state.videos[clientId]) state.videos[clientId] = {};
@@ -211,8 +221,13 @@ let ui = {
   addingClient: false,
   addingClientTipo: 'fixo', // 'fixo' | 'esporadico'
   deleteArm: {}, // key -> timestamp, for two-step delete buttons
-  toast: null
+  toast: null,
+  valuesHidden: false // privacy toggle — device-local preference, not synced
 };
+
+const PRIVACY_KEY = 'jnf-privacy-hidden';
+try{ ui.valuesHidden = localStorage.getItem(PRIVACY_KEY) === '1'; }catch(e){}
+document.body.classList.toggle('privacy-on', ui.valuesHidden);
 
 function ensureClientView(clientId){
   if(!ui.clientView[clientId]){
@@ -262,11 +277,20 @@ function render(){
     <div class="topbar">
       <div class="brand">
         <h1>${esc(state.business.nomeFantasia||'Minha empresa')}</h1>
-        <div class="sub">CNPJ ${esc(state.business.cnpj||'—')}</div>
+        <div class="sub sensitive">CNPJ ${esc(state.business.cnpj||'—')}</div>
       </div>
-      <div class="topbar-stat">
-        <div class="stat-label">Faturamento de ${MES_NOME[REAL_MONTH]} (todos os clientes)</div>
-        <div class="stat-value">R$ ${fmtBRL(totalMesAtual)}</div>
+      <div class="topbar-right">
+        <button class="privacy-toggle ${ui.valuesHidden?'active':''}" type="button" data-action="toggle-privacy" aria-pressed="${ui.valuesHidden}">
+          <svg class="icon-eye" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" ${ui.valuesHidden?'hidden':''}><path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7-11-7-11-7z"/><circle cx="12" cy="12" r="3"/></svg>
+          <svg class="icon-eye-off" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" ${ui.valuesHidden?'':'hidden'}><path d="M17.94 17.94A10.94 10.94 0 0 1 12 20c-7 0-11-8-11-8a21.86 21.86 0 0 1 5.06-6.06M9.9 4.24A10.94 10.94 0 0 1 12 4c7 0 11 8 11 8a21.9 21.9 0 0 1-3.22 4.44M1 1l22 22"/></svg>
+          <span>${ui.valuesHidden ? 'Mostrar valores' : 'Ocultar valores'}</span>
+        </button>
+        <div class="topbar-stat">
+          <div>
+            <div class="stat-label">Faturamento de ${MES_NOME[REAL_MONTH]} (todos os clientes)</div>
+            <div class="stat-value sensitive">R$ ${fmtBRL(totalMesAtual)}</div>
+          </div>
+        </div>
       </div>
       <div id="savestate" class="savestate">salvo</div>
     </div>
@@ -281,22 +305,27 @@ function render(){
 
 function renderRail(){
   let html = '<div class="rail">';
+  html += `<div class="rail-group-label">Clientes</div>`;
   state.clientOrder.forEach(id=>{
     const c = clientById(id);
     if(!c) return;
     const active = ui.tab===id;
     const total = clientYearTotal(id, ensureClientView(id).year);
     html += `<button class="tab-btn ${active?'active':''}" data-action="switch-tab" data-tab="${id}">
-      <span>${esc(c.nome)}</span>
-      <span class="tag">R$ ${fmtBRL(total)}</span>
+      <span class="tab-chip ${chipClass(id)}">${esc(initials(c.nome))}</span>
+      <span class="tab-label">${esc(c.nome)}</span>
+      <span class="tag sensitive">R$ ${fmtBRL(total)}</span>
     </button>`;
   });
   html += `<div class="rail-divider"></div>`;
+  html += `<div class="rail-group-label">Visão geral</div>`;
   html += `<button class="tab-btn ${ui.tab==='FATURAMENTO'?'active':''}" data-action="switch-tab" data-tab="FATURAMENTO">
-    <span>Faturamento &amp; Limite MEI</span>
+    <span class="tab-chip">%</span>
+    <span class="tab-label">Faturamento &amp; Limite MEI</span>
   </button>`;
   html += `<button class="tab-btn ${ui.tab==='CONFIG'?'active':''}" data-action="switch-tab" data-tab="CONFIG">
-    <span>Configurações</span>
+    <span class="tab-chip">⚙</span>
+    <span class="tab-label">Configurações</span>
   </button>`;
 
   if(ui.addingClient){
@@ -400,7 +429,7 @@ function renderClientPanel(clientId){
         <textarea class="esp-textarea" rows="2" placeholder="Escreva aqui: cliente, o que foi feito, quantos vídeos etc."
           data-role="video-field" data-client="${clientId}" data-ym="${ym}" data-row="${r.id}" data-field="headline">${esc(r.headline)}</textarea>
         <div class="esp-card-foot">
-          <div class="valor-wrap"><span class="valor-prefix">R$</span><input class="cell-input valor" type="text" inputmode="decimal" value="${esc(valorDisplay(r.valor))}"
+          <div class="valor-wrap"><span class="valor-prefix">R$</span><input class="cell-input valor sensitive" type="text" inputmode="decimal" value="${esc(valorDisplay(r.valor))}"
             data-role="video-field" data-client="${clientId}" data-ym="${ym}" data-row="${r.id}" data-field="valor" placeholder="0,00"></div>
           <button class="icon-btn" title="Excluir lançamento" data-action="delete-video" data-client="${clientId}" data-ym="${ym}" data-row="${r.id}">✕</button>
         </div>
@@ -422,7 +451,7 @@ function renderClientPanel(clientId){
           data-role="video-field" data-client="${clientId}" data-ym="${ym}" data-row="${r.id}" data-field="subcliente" placeholder="Cliente final"></td>
         <td><input class="cell-input" type="date" value="${esc(r.data)}"
           data-role="video-field" data-client="${clientId}" data-ym="${ym}" data-row="${r.id}" data-field="data"></td>
-        <td><div class="valor-wrap"><span class="valor-prefix">R$</span><input class="cell-input valor" type="text" inputmode="decimal" value="${esc(valorDisplay(r.valor))}"
+        <td><div class="valor-wrap"><span class="valor-prefix">R$</span><input class="cell-input valor sensitive" type="text" inputmode="decimal" value="${esc(valorDisplay(r.valor))}"
           data-role="video-field" data-client="${clientId}" data-ym="${ym}" data-row="${r.id}" data-field="valor"></div></td>
         <td class="acao"><button class="icon-btn" title="Excluir vídeo" data-action="delete-video" data-client="${clientId}" data-ym="${ym}" data-row="${r.id}">✕</button></td>
       </tr>`;
@@ -437,14 +466,14 @@ function renderClientPanel(clientId){
         <button data-action="year-step" data-client="${clientId}" data-dir="-1">‹</button>
         <span>${view.year}</span>
         <button data-action="year-step" data-client="${clientId}" data-dir="1">›</button>
-        <span style="color:var(--ink-faint);margin-left:8px;">total do ano: R$ ${fmtBRL(yearTotal)}</span>
+        <span style="color:var(--ink-faint);margin-left:8px;">total do ano: <span class="mono sensitive" style="color:var(--cream);">R$ ${fmtBRL(yearTotal)}</span></span>
       </div>
     </div>
     ${monthsHtml}
     ${rowsHtml}
     <div class="table-foot">
       <button class="add-row-btn" data-action="add-video" data-client="${clientId}" data-ym="${ym}">+ ${isEsp?'adicionar lançamento':'adicionar vídeo'}</button>
-      <div class="month-total">Total do mês: <b>R$ ${fmtBRL(total)}</b></div>
+      <div class="month-total">Total do mês: <b class="sensitive">R$ ${fmtBRL(total)}</b></div>
     </div>
     <div class="action-bar">
       <button class="btn primary" data-action="gerar-pdf" data-client="${clientId}" data-ym="${ym}" ${rows.length===0?'disabled':''}>Gerar relatório PDF do mês</button>
@@ -460,11 +489,14 @@ function renderFaturamento(){
   const limite = parseBRL(state.meiLimiteAnual)||81000;
   const pct = Math.min((total/limite)*100, 999);
   const pctClamped = Math.min(pct,100);
-  let gaugeClass = '', msgClass='', msg='';
+  let msgClass='', msg='';
   const restante = limite - total;
-  if(pct>=100){ gaugeClass='over'; msgClass='over'; msg=`Limite ultrapassado em R$ ${fmtBRL(Math.abs(restante))}. Fique atento ao desenquadramento do MEI.`; }
-  else if(pct>=90){ gaugeClass='warn'; msgClass='warn'; msg=`Faltam R$ ${fmtBRL(restante)} para o limite anual — atenção.`; }
+  if(pct>=100){ msgClass='over'; msg=`Limite ultrapassado em R$ ${fmtBRL(Math.abs(restante))}. Fique atento ao desenquadramento do MEI.`; }
+  else if(pct>=90){ msgClass='warn'; msg=`Faltam R$ ${fmtBRL(restante)} para o limite anual — atenção.`; }
   else { msg = `Faltam R$ ${fmtBRL(restante)} para o limite anual de R$ ${fmtBRL(limite)}.`; }
+  const gaugeStroke = pct>=100 ? 'var(--danger)' : 'url(#gaugeGrad)';
+  const circumference = 376.99; // 2*PI*60
+  const dash = ((pctClamped/100)*circumference).toFixed(1);
 
   const {buckets, semData} = notasMonthlyBreakdown(year);
   const maxBucket = Math.max(1, ...Object.values(buckets));
@@ -475,14 +507,14 @@ function renderFaturamento(){
     barsHtml += `<div class="mbar-row">
       <div class="lbl">${m.nome}</div>
       <div class="mbar-track"><div class="mbar-fill" style="width:${w}%"></div></div>
-      <div class="val">R$ ${fmtBRL(v)}</div>
+      <div class="val sensitive">R$ ${fmtBRL(v)}</div>
     </div>`;
   });
   if(semData>0){
     barsHtml += `<div class="mbar-row">
       <div class="lbl">Sem data</div>
-      <div class="mbar-track"><div class="mbar-fill" style="width:${(semData/maxBucket)*100}%;background:var(--gold-wash);border-color:var(--gold);"></div></div>
-      <div class="val">R$ ${fmtBRL(semData)}</div>
+      <div class="mbar-track"><div class="mbar-fill" style="width:${(semData/maxBucket)*100}%;background:var(--ink-faint);"></div></div>
+      <div class="val sensitive">R$ ${fmtBRL(semData)}</div>
     </div>`;
   }
   barsHtml += '</div>';
@@ -509,7 +541,7 @@ function renderFaturamento(){
           data-role="nota-field" data-year="${year}" data-row="${r.id}" data-field="empresa"></td>
         <td><input class="cell-input" type="date" value="${esc(r.data||'')}"
           data-role="nota-field" data-year="${year}" data-row="${r.id}" data-field="data"></td>
-        <td><div class="valor-wrap"><span class="valor-prefix">R$</span><input class="cell-input valor" type="text" inputmode="decimal" value="${esc(valorDisplay(r.valor))}"
+        <td><div class="valor-wrap"><span class="valor-prefix">R$</span><input class="cell-input valor sensitive" type="text" inputmode="decimal" value="${esc(valorDisplay(r.valor))}"
           data-role="nota-field" data-year="${year}" data-row="${r.id}" data-field="valor"></div></td>
         <td class="acao"><button class="icon-btn" title="Excluir nota" data-action="delete-nota" data-year="${year}" data-row="${r.id}">✕</button></td>
       </tr>`;
@@ -532,19 +564,35 @@ function renderFaturamento(){
     </div>
 
     <div class="hero">
-      <div class="hero-num">
-        <div class="label">Faturado em ${year}</div>
-        <div class="value">R$ ${fmtBRL(total).split(',')[0]}<span class="cents">,${fmtBRL(total).split(',')[1]}</span></div>
+      <div class="gauge-wrap">
+        <svg width="150" height="150" viewBox="0 0 150 150">
+          <circle cx="75" cy="75" r="60" fill="none" stroke="rgba(243,236,239,0.08)" stroke-width="12"/>
+          <circle cx="75" cy="75" r="60" fill="none" stroke="${gaugeStroke}" stroke-width="12"
+            stroke-linecap="round" stroke-dasharray="${dash} 376.99"/>
+          <defs>
+            <linearGradient id="gaugeGrad" x1="0" y1="0" x2="1" y2="1">
+              <stop offset="0%" stop-color="#26425A"/>
+              <stop offset="100%" stop-color="#86A8CF"/>
+            </linearGradient>
+          </defs>
+        </svg>
+        <div class="gauge-center">
+          <div class="pct">${pctClamped.toFixed(1).replace('.',',')}<span style="font-size:14px;">%</span></div>
+          <div class="pct-label">do limite</div>
+        </div>
       </div>
-      <div class="hero-limit">
-        limite anual (MEI): R$
-        <input type="text" inputmode="decimal" value="${esc(valorDisplay(limite))}" data-role="limite-field">
+      <div class="hero-figures">
+        <div class="hero-num">
+          <div class="label">Faturado em ${year}</div>
+          <div class="value sensitive">R$ ${fmtBRL(total).split(',')[0]}<span class="cents">,${fmtBRL(total).split(',')[1]}</span></div>
+        </div>
+        <div class="gauge-msg ${msgClass} sensitive">${msg}</div>
+        <div class="hero-limit">
+          limite anual (MEI): R$
+          <input class="sensitive" type="text" inputmode="decimal" value="${esc(valorDisplay(limite))}" data-role="limite-field">
+        </div>
       </div>
     </div>
-
-    <div class="gauge"><div class="gauge-fill ${gaugeClass}" style="width:${pctClamped}%"></div></div>
-    <div class="gauge-ticks"><span>0</span><span>25%</span><span>50%</span><span>75%</span><span>100%</span></div>
-    <div class="gauge-msg ${msgClass}">${msg}</div>
 
     <div class="section-title">Por mês</div>
     ${barsHtml}
@@ -553,7 +601,7 @@ function renderFaturamento(){
     ${rowsHtml}
     <div class="table-foot">
       <button class="add-row-btn" data-action="add-nota" data-year="${year}">+ adicionar nota</button>
-      <div class="month-total">Total ${year}: <b>R$ ${fmtBRL(total)}</b></div>
+      <div class="month-total">Total ${year}: <b class="sensitive">R$ ${fmtBRL(total)}</b></div>
     </div>
   `;
 }
@@ -568,10 +616,11 @@ function renderConfig(){
     const armed = isArmed('client-'+id);
     const isEsp = c.tipo==='esporadico';
     clientsHtml += `<div class="client-mgmt-row">
+      <div class="client-avatar ${chipClass(id)}">${esc(initials(c.nome))}</div>
       <input type="text" value="${esc(c.nome)}" data-role="client-field" data-client="${id}" data-field="nome">
       ${isEsp
         ? `<span class="tipo-badge" title="Cliente esporádico, sem valor padrão a cada lançamento">esporádico</span>`
-        : `<input type="text" inputmode="decimal" value="${esc(valorDisplay(c.valorPadrao))}" title="Valor padrão por vídeo" data-role="client-field" data-client="${id}" data-field="valorPadrao">`}
+        : `<input class="sensitive" type="text" inputmode="decimal" value="${esc(valorDisplay(c.valorPadrao))}" title="Valor padrão por vídeo" data-role="client-field" data-client="${id}" data-field="valorPadrao">`}
       <button class="btn small danger-step ${armed?'confirming':''}" data-action="delete-client" data-client="${id}">
         ${armed?'Confirmar exclusão':'Excluir aba'}
       </button>
@@ -588,9 +637,9 @@ function renderConfig(){
       <div class="field"><label>Razão social</label>
         <input type="text" value="${esc(b.razaoSocial)}" data-role="business-field" data-field="razaoSocial"></div>
       <div class="field"><label>CNPJ</label>
-        <input type="text" value="${esc(b.cnpj)}" data-role="business-field" data-field="cnpj"></div>
+        <input class="sensitive" type="text" value="${esc(b.cnpj)}" data-role="business-field" data-field="cnpj"></div>
       <div class="field"><label>Chave Pix</label>
-        <input type="text" value="${esc(b.pix)}" data-role="business-field" data-field="pix"></div>
+        <input class="sensitive" type="text" value="${esc(b.pix)}" data-role="business-field" data-field="pix"></div>
       <div class="field"><label>E-mail (opcional)</label>
         <input type="text" value="${esc(b.email)}" data-role="business-field" data-field="email"></div>
       <div class="field"><label>Telefone (opcional)</label>
@@ -600,7 +649,7 @@ function renderConfig(){
     <div class="section-title">Limite anual do MEI</div>
     <div class="field" style="max-width:220px;">
       <label>Valor do limite (R$)</label>
-      <input type="text" inputmode="decimal" value="${esc(valorDisplay(state.meiLimiteAnual))}" data-role="limite-field">
+      <input class="sensitive" type="text" inputmode="decimal" value="${esc(valorDisplay(state.meiLimiteAnual))}" data-role="limite-field">
     </div>
 
     <div class="section-title">Abas de clientes</div>
@@ -712,8 +761,10 @@ function onAppInputInner(e){
     persist();
     // rail tab label shows the client name live — patch just that span.
     if(t.dataset.field==='nome'){
-      const railLabel = document.querySelector(`.rail .tab-btn[data-tab="${t.dataset.client}"] span:first-child`);
+      const railLabel = document.querySelector(`.rail .tab-btn[data-tab="${t.dataset.client}"] .tab-label`);
       if(railLabel) railLabel.textContent = t.value;
+      const railChip = document.querySelector(`.rail .tab-btn[data-tab="${t.dataset.client}"] .tab-chip`);
+      if(railChip) railChip.textContent = initials(t.value);
     }
   } else if(role==='limite-field'){
     state.meiLimiteAnual = t.value;
@@ -778,7 +829,13 @@ function onAppClickInner(e){
   if(!btn) return;
   const action = btn.dataset.action;
 
-  if(action==='switch-tab'){
+  if(action==='toggle-privacy'){
+    ui.valuesHidden = !ui.valuesHidden;
+    document.body.classList.toggle('privacy-on', ui.valuesHidden);
+    try{ localStorage.setItem(PRIVACY_KEY, ui.valuesHidden ? '1' : '0'); }catch(e){}
+    render();
+  }
+  else if(action==='switch-tab'){
     ui.tab = btn.dataset.tab;
     if(ui.tab!=='FATURAMENTO' && ui.tab!=='CONFIG') ensureClientView(ui.tab);
     render();
