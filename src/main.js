@@ -1067,12 +1067,12 @@ function generatePDF(clientId, ym){
 
   doc.setFont('helvetica','bold');
   doc.setFontSize(18);
-  doc.setTextColor(20,24,20);
+  doc.setTextColor(10,14,31);
   doc.text(b.nomeFantasia || 'Relatório', marginX, 50);
 
   doc.setFont('helvetica','normal');
   doc.setFontSize(9.5);
-  doc.setTextColor(90,95,85);
+  doc.setTextColor(91,104,132);
   let infoY = 68;
   if(b.razaoSocial){ doc.text(b.razaoSocial, marginX, infoY); infoY += 13; }
   if(b.cnpj){ doc.text(`CNPJ: ${b.cnpj}`, marginX, infoY); infoY += 13; }
@@ -1080,16 +1080,16 @@ function generatePDF(clientId, ym){
   if(b.email){ doc.text(b.email, marginX, infoY); infoY += 13; }
   if(b.telefone){ doc.text(b.telefone, marginX, infoY); infoY += 13; }
 
-  doc.setDrawColor(220,210,180);
+  doc.setDrawColor(199,214,230);
   doc.line(marginX, infoY+4, pageWidth-marginX, infoY+4);
 
   doc.setFont('helvetica','bold');
   doc.setFontSize(13);
-  doc.setTextColor(20,24,20);
+  doc.setTextColor(10,14,31);
   doc.text(`Relatório mensal — ${c.nome}`, marginX, infoY+26);
   doc.setFont('helvetica','normal');
   doc.setFontSize(10.5);
-  doc.setTextColor(90,95,85);
+  doc.setTextColor(91,104,132);
   doc.text(`${mesNome} de ${year}`, marginX, infoY+42);
 
   const isEsp = c.tipo==='esporadico';
@@ -1113,9 +1113,9 @@ function generatePDF(clientId, ym){
     margin: {left: marginX, right: marginX},
     head: [isEsp ? ['Nº','Descrição','Valor'] : ['Nº','Vídeo','Cliente','Data','Valor']],
     body: body,
-    styles: { font:'helvetica', fontSize:9.5, textColor:[34,38,31], cellPadding:6, lineColor:[221,211,182], lineWidth:0.5 },
-    headStyles: { fillColor:[14,111,99], textColor:[255,255,255], fontStyle:'bold' },
-    alternateRowStyles: { fillColor:[245,240,228] },
+    styles: { font:'helvetica', fontSize:9.5, textColor:[26,32,46], cellPadding:6, lineColor:[214,222,232], lineWidth:0.5 },
+    headStyles: { fillColor:[38,66,90], textColor:[255,255,255], fontStyle:'bold' },
+    alternateRowStyles: { fillColor:[237,241,247] },
     columnStyles: isEsp ? {
       0:{cellWidth:28},
       2:{cellWidth:80, halign:'right'}
@@ -1125,33 +1125,32 @@ function generatePDF(clientId, ym){
       4:{cellWidth:80, halign:'right'}
     },
     foot: isEsp ? [['','Total', 'R$ ' + fmtBRL(total)]] : [['','','','Total', 'R$ ' + fmtBRL(total)]],
-    footStyles: { fillColor:[237,229,208], textColor:[34,38,31], fontStyle:'bold', halign:'right' }
+    footStyles: { fillColor:[222,231,241], textColor:[10,14,31], fontStyle:'bold', halign:'right' }
   });
 
   const finalY = doc.lastAutoTable.finalY + 20;
   doc.setFontSize(9);
-  doc.setTextColor(140,140,130);
+  doc.setTextColor(130,140,156);
   doc.text(isEsp ? `${rows.length} lançamento(s) neste mês.` : `${rows.length} vídeo(s) editado(s) neste mês.`, marginX, finalY);
   doc.text(`Gerado em ${new Date().toLocaleDateString('pt-BR')}`, marginX, finalY+13);
 
   const filename = `${mesNome} - ${year} - ${c.nome}.pdf`;
 
-  // Sandboxed environments (like this artifact preview) often block the
-  // "click a hidden <a download>" trick used by doc.save(), which can
-  // navigate the whole page away and leave it blank. Opening the PDF in
-  // a new tab is more reliable; fall back to the download link if popups
-  // are blocked.
+  // We're on a real static site now (not the sandboxed Claude Artifact
+  // preview from before), so the direct-download trick works normally —
+  // trigger it unconditionally so the file is always saved, since a blob:
+  // PDF opened in a standalone-app preview window sometimes has non-working
+  // toolbar buttons (zoom/download) in Safari. Still open the preview tab
+  // too, since it's handy to glance at the report right away.
   const blob = doc.output('blob');
   const url = URL.createObjectURL(blob);
-  const win = window.open(url, '_blank');
-  if(!win){
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = filename;
-    document.body.appendChild(a);
-    a.click();
-    a.remove();
-  }
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  window.open(url, '_blank');
   setTimeout(()=> URL.revokeObjectURL(url), 60000);
 }
 
