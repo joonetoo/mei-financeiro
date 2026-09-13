@@ -181,6 +181,110 @@ function chipClass(clientId){
   return 'chip-' + (((idx<0?0:idx))%3);
 }
 
+/* ---------------- limite MEI (shared by the stats row + Faturamento hero) ---------------- */
+function limiteProgress(year){
+  const total = notasYearTotal(year);
+  const limite = parseBRL(state.meiLimiteAnual)||81000;
+  const pct = Math.min((total/limite)*100, 999);
+  const pctClamped = Math.min(pct,100);
+  const restante = limite - total;
+  let msgClass='', msg='';
+  if(pct>=100){ msgClass='danger'; msg=`Limite ultrapassado em R$ ${fmtBRL(Math.abs(restante))}. Fique atento ao desenquadramento do MEI.`; }
+  else if(pct>=90){ msgClass='warn'; msg=`Faltam R$ ${fmtBRL(restante)} para o limite anual — atenção.`; }
+  else { msg = `Faltam R$ ${fmtBRL(restante)} para o limite anual de R$ ${fmtBRL(limite)}.`; }
+  return {total, limite, pct, pctClamped, msgClass, msg, restante};
+}
+
+/* ---------------- motion helpers ----------------
+   render() rebuilds the whole #app subtree every time (see render(), below),
+   so a freshly-created element has no "previous state" for a plain CSS
+   transition to animate from. These helpers do a small FLIP-style shim:
+   snap to the last known geometry/value with transitions off, force a
+   reflow, then apply the new value with transitions back on. @keyframes-based
+   entrances (.row-enter) don't need this — they always animate from their
+   own `from` state on a freshly-inserted element. */
+function prefersReducedMotion(){
+  return window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+}
+
+let sliderGeom = {};
+function syncSlider(key, pillSel, activeSel){
+  const pill = document.querySelector(pillSel);
+  const active = document.querySelector(activeSel);
+  if(!pill || !active) return;
+  const target = {left:active.offsetLeft, top:active.offsetTop, width:active.offsetWidth, height:active.offsetHeight};
+  const reduced = prefersReducedMotion();
+  const prev = sliderGeom[key];
+  if(prev && !reduced){
+    pill.style.transition = 'none';
+    pill.style.transform = `translate(${prev.left}px,${prev.top}px)`;
+    pill.style.width = prev.width+'px'; pill.style.height = prev.height+'px';
+    pill.offsetHeight; // force reflow so the "no transition" snap actually commits
+    pill.style.transition = '';
+  }
+  const apply = () => {
+    pill.style.opacity = '1';
+    pill.style.transform = `translate(${target.left}px,${target.top}px)`;
+    pill.style.width = target.width+'px'; pill.style.height = target.height+'px';
+    sliderGeom[key] = target;
+  };
+  reduced ? apply() : requestAnimationFrame(apply);
+}
+
+let lastGaugeOffset = null;
+function syncGauge(){
+  const circle = document.querySelector('.gauge-ring-fill');
+  if(!circle) return;
+  const circumference = 376.99; // 2*PI*60, matches the SVG circle's r=60
+  const {pctClamped} = limiteProgress(ui.fatYear);
+  const target = (circumference * (1 - pctClamped/100)).toFixed(1);
+  const reduced = prefersReducedMotion();
+  if(lastGaugeOffset===null) lastGaugeOffset = circumference;
+  if(!reduced){
+    circle.style.transition = 'none';
+    circle.setAttribute('stroke-dashoffset', lastGaugeOffset);
+    circle.getBoundingClientRect();
+    circle.style.transition = '';
+  }
+  const apply = () => { circle.setAttribute('stroke-dashoffset', target); lastGaugeOffset = target; };
+  reduced ? apply() : requestAnimationFrame(apply);
+}
+
+let lastBarWidths = {};
+function syncBars(){
+  document.querySelectorAll('.mbar-fill[data-target]').forEach((el,i)=>{
+    const target = el.getAttribute('data-target');
+    const reduced = prefersReducedMotion();
+    const prev = lastBarWidths[i];
+    if(prev!==undefined && !reduced){
+      el.style.transition = 'none';
+      el.style.width = prev+'%';
+      el.getBoundingClientRect();
+      el.style.transition = '';
+    }
+    const apply = () => { el.style.width = target+'%'; lastBarWidths[i]=target; };
+    reduced ? apply() : requestAnimationFrame(apply);
+  });
+}
+
+// Digitar num campo de valor aciona renderPreserveFocus() (um render() completo)
+// a cada tecla — sem essa guarda, a entrada escalonada das linhas replayaria a
+// cada caractere digitado. Só reanima quando o "escopo" (cliente+mês, ou ano de
+// notas) realmente muda.
+let lastAnimatedScope = null;
+function shouldAnimateRows(scopeKey){
+  const changed = scopeKey !== lastAnimatedScope;
+  lastAnimatedScope = scopeKey;
+  return changed;
+}
+
+/* ---------------- small inline icons (rail nav + stats row) ---------------- */
+function iconBars(size=15){return `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 20V10M12 20V4M20 20v-7"/></svg>`;}
+function iconCalendar(size=15){return `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="3"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>`;}
+function iconGauge(size=15){return `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 21a9 9 0 1 0-9-9"/><path d="M12 12l4-4"/></svg>`;}
+function iconUsers(size=15){return `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8" r="3.2"/><path d="M2.5 20c0-3.5 3-6 6.5-6s6.5 2.5 6.5 6"/><circle cx="17.5" cy="9" r="2.6"/><path d="M15.8 14.3c2.4.5 4.2 2.5 4.2 5.2"/></svg>`;}
+function iconGear(size=15){return `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3.2"/><path d="M19.4 13a7.6 7.6 0 0 0 0-2l2-1.6-2-3.4-2.4 1a7.7 7.7 0 0 0-1.7-1L15 3h-6l-.3 2.6a7.7 7.7 0 0 0-1.7 1l-2.4-1-2 3.4L4.6 11a7.6 7.6 0 0 0 0 2l-2 1.6 2 3.4 2.4-1a7.7 7.7 0 0 0 1.7 1L9 21h6l.3-2.6a7.7 7.7 0 0 0 1.7-1l2.4 1 2-3.4-2-1.6Z"/></svg>`;}
+
 function getVideos(clientId, ym){
   if(!state.videos[clientId]) state.videos[clientId] = {};
   if(!state.videos[clientId][ym]) state.videos[clientId][ym] = [];
@@ -269,10 +373,41 @@ function todosClientesMesTotal(ym){
   return state.clientOrder.reduce((s, id) => s + monthTotal(id, ym), 0);
 }
 
-function render(){
-  const app = document.getElementById('app');
+function renderStatsRow(){
   const ymAtual = monthKey(REAL_YEAR, REAL_MONTH);
   const totalMesAtual = todosClientesMesTotal(ymAtual);
+  const {pctClamped, msgClass} = limiteProgress(REAL_YEAR);
+  const statusCls = msgClass || 'ok';
+  const statusLabel = statusCls==='danger' ? 'Limite excedido' : statusCls==='warn' ? 'Atenção' : 'Tranquilo';
+  return `
+    <div class="stats-row">
+      <div class="stat-card">
+        <div class="stat-icon">${iconBars()}</div>
+        <div class="stat-label">Faturamento de ${MES_NOME[REAL_MONTH]}</div>
+        <div class="stat-value sensitive">R$ ${fmtBRL(totalMesAtual)}</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-icon">${iconCalendar()}</div>
+        <div class="stat-label">Faturado em ${REAL_YEAR}</div>
+        <div class="stat-value sensitive">R$ ${fmtBRL(notasYearTotal(REAL_YEAR))}</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-icon">${iconGauge()}</div>
+        <div class="stat-label">Limite MEI usado</div>
+        <div class="stat-value">${pctClamped.toFixed(1).replace('.',',')}%</div>
+        <div class="stat-foot"><span class="stat-pill ${statusCls}">${statusLabel}</span></div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-icon">${iconUsers()}</div>
+        <div class="stat-label">Clientes ativos</div>
+        <div class="stat-value">${state.clients.length}</div>
+      </div>
+    </div>
+  `;
+}
+
+function render(){
+  const app = document.getElementById('app');
   app.innerHTML = `
     <div class="topbar">
       <div class="brand">
@@ -285,15 +420,10 @@ function render(){
           <svg class="icon-eye-off" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" ${ui.valuesHidden?'':'hidden'}><path d="M17.94 17.94A10.94 10.94 0 0 1 12 20c-7 0-11-8-11-8a21.86 21.86 0 0 1 5.06-6.06M9.9 4.24A10.94 10.94 0 0 1 12 4c7 0 11 8 11 8a21.9 21.9 0 0 1-3.22 4.44M1 1l22 22"/></svg>
           <span>${ui.valuesHidden ? 'Mostrar valores' : 'Ocultar valores'}</span>
         </button>
-        <div class="topbar-stat">
-          <div>
-            <div class="stat-label">Faturamento de ${MES_NOME[REAL_MONTH]} (todos os clientes)</div>
-            <div class="stat-value sensitive">R$ ${fmtBRL(totalMesAtual)}</div>
-          </div>
-        </div>
       </div>
       <div id="savestate" class="savestate">salvo</div>
     </div>
+    ${renderStatsRow()}
     <div class="layout">
       ${renderRail()}
       <div class="main">${renderMain()}</div>
@@ -305,6 +435,7 @@ function render(){
 
 function renderRail(){
   let html = '<div class="rail">';
+  html += `<div class="rail-slide-pill"></div>`;
   html += `<div class="rail-group-label">Clientes</div>`;
   state.clientOrder.forEach(id=>{
     const c = clientById(id);
@@ -320,11 +451,11 @@ function renderRail(){
   html += `<div class="rail-divider"></div>`;
   html += `<div class="rail-group-label">Visão geral</div>`;
   html += `<button class="tab-btn ${ui.tab==='FATURAMENTO'?'active':''}" data-action="switch-tab" data-tab="FATURAMENTO">
-    <span class="tab-chip">%</span>
+    <span class="tab-chip">${iconGauge(14)}</span>
     <span class="tab-label">Faturamento &amp; Limite MEI</span>
   </button>`;
   html += `<button class="tab-btn ${ui.tab==='CONFIG'?'active':''}" data-action="switch-tab" data-tab="CONFIG">
-    <span class="tab-chip">⚙</span>
+    <span class="tab-chip">${iconGear(14)}</span>
     <span class="tab-label">Configurações</span>
   </button>`;
 
@@ -375,6 +506,17 @@ function attachHandlers(){
     if(nameInput) nameInput.focus();
   }
   autoResizeTextareas();
+
+  requestAnimationFrame(()=>{
+    syncSlider('rail', '.rail-slide-pill', '.rail .tab-btn.active');
+    if(ui.tab && ui.tab!=='FATURAMENTO' && ui.tab!=='CONFIG'){
+      syncSlider('months-'+ui.tab, '.month-slide-pill', '.months .month-pill.active');
+    }
+    if(ui.tab==='FATURAMENTO'){
+      syncGauge();
+      syncBars();
+    }
+  });
 }
 
 function autoResizeTextareas(){
@@ -405,7 +547,7 @@ function renderClientPanel(clientId){
   const total = monthTotal(clientId, ym);
   const yearTotal = clientYearTotal(clientId, view.year);
 
-  let monthsHtml = '<div class="months">';
+  let monthsHtml = '<div class="months"><div class="month-slide-pill"></div>';
   MESES.forEach(m=>{
     const k = monthKey(view.year, m.k);
     const has = (state.videos[clientId] && state.videos[clientId][k] && state.videos[clientId][k].length>0);
@@ -418,6 +560,7 @@ function renderClientPanel(clientId){
   monthsHtml += '</div>';
 
   const isEsp = c.tipo==='esporadico';
+  const animateRows = shouldAnimateRows('client:'+clientId+':'+ym);
 
   let rowsHtml = '';
   if(rows.length===0){
@@ -425,7 +568,7 @@ function renderClientPanel(clientId){
   } else if(isEsp){
     rowsHtml = `<div class="esp-cards">`;
     rows.forEach(r=>{
-      rowsHtml += `<div class="esp-card" data-row="${r.id}">
+      rowsHtml += `<div class="esp-card ${animateRows?'row-enter':''}" data-row="${r.id}">
         <textarea class="esp-textarea" rows="2" placeholder="Escreva aqui: cliente, o que foi feito, quantos vídeos etc."
           data-role="video-field" data-client="${clientId}" data-ym="${ym}" data-row="${r.id}" data-field="headline">${esc(r.headline)}</textarea>
         <div class="esp-card-foot">
@@ -443,7 +586,7 @@ function renderClientPanel(clientId){
         <th class="data">Data</th><th class="valor">Valor</th><th class="acao"></th>
       </tr></thead><tbody>`;
     rows.forEach((r,i)=>{
-      rowsHtml += `<tr data-row="${r.id}">
+      rowsHtml += `<tr data-row="${r.id}" class="${animateRows?'row-enter':''}">
         <td class="num">${i+1}</td>
         <td><input class="cell-input" type="text" value="${esc(r.headline)}"
           data-role="video-field" data-client="${clientId}" data-ym="${ym}" data-row="${r.id}" data-field="headline" placeholder="Nome do vídeo"></td>
@@ -462,11 +605,17 @@ function renderClientPanel(clientId){
   return `
     <div class="panel-head">
       <div class="panel-title">${esc(c.nome)}${isEsp?' <span class="tipo-badge">esporádico</span>':''}</div>
-      <div class="year-switch">
-        <button data-action="year-step" data-client="${clientId}" data-dir="-1">‹</button>
-        <span>${view.year}</span>
-        <button data-action="year-step" data-client="${clientId}" data-dir="1">›</button>
-        <span style="color:var(--ink-faint);margin-left:8px;">total do ano: <span class="mono sensitive" style="color:var(--cream);">R$ ${fmtBRL(yearTotal)}</span></span>
+      <div class="panel-head-right">
+        <div class="mini-stats">
+          <div class="mini-stat"><div class="v sensitive">R$ ${fmtBRL(total)}</div><div class="l">este mês</div></div>
+          <div class="mini-stat"><div class="v sensitive">R$ ${fmtBRL(yearTotal)}</div><div class="l">no ano</div></div>
+          <div class="mini-stat"><div class="v">${rows.length}</div><div class="l">lançamentos</div></div>
+        </div>
+        <div class="year-switch">
+          <button data-action="year-step" data-client="${clientId}" data-dir="-1">‹</button>
+          <span>${view.year}</span>
+          <button data-action="year-step" data-client="${clientId}" data-dir="1">›</button>
+        </div>
       </div>
     </div>
     ${monthsHtml}
@@ -485,18 +634,7 @@ function renderClientPanel(clientId){
 /* ---------------- faturamento / limite MEI ---------------- */
 function renderFaturamento(){
   const year = ui.fatYear;
-  const total = notasYearTotal(year);
-  const limite = parseBRL(state.meiLimiteAnual)||81000;
-  const pct = Math.min((total/limite)*100, 999);
-  const pctClamped = Math.min(pct,100);
-  let msgClass='', msg='';
-  const restante = limite - total;
-  if(pct>=100){ msgClass='over'; msg=`Limite ultrapassado em R$ ${fmtBRL(Math.abs(restante))}. Fique atento ao desenquadramento do MEI.`; }
-  else if(pct>=90){ msgClass='warn'; msg=`Faltam R$ ${fmtBRL(restante)} para o limite anual — atenção.`; }
-  else { msg = `Faltam R$ ${fmtBRL(restante)} para o limite anual de R$ ${fmtBRL(limite)}.`; }
-  const gaugeStroke = pct>=100 ? 'var(--danger)' : 'url(#gaugeGrad)';
-  const circumference = 376.99; // 2*PI*60
-  const dash = ((pctClamped/100)*circumference).toFixed(1);
+  const {total, limite, pctClamped, msgClass, msg} = limiteProgress(year);
 
   const {buckets, semData} = notasMonthlyBreakdown(year);
   const maxBucket = Math.max(1, ...Object.values(buckets));
@@ -506,14 +644,14 @@ function renderFaturamento(){
     const w = (v/maxBucket)*100;
     barsHtml += `<div class="mbar-row">
       <div class="lbl">${m.nome}</div>
-      <div class="mbar-track"><div class="mbar-fill" style="width:${w}%"></div></div>
+      <div class="mbar-track"><div class="mbar-fill" data-target="${w.toFixed(2)}"></div></div>
       <div class="val sensitive">R$ ${fmtBRL(v)}</div>
     </div>`;
   });
   if(semData>0){
     barsHtml += `<div class="mbar-row">
       <div class="lbl">Sem data</div>
-      <div class="mbar-track"><div class="mbar-fill" style="width:${(semData/maxBucket)*100}%;background:var(--ink-faint);"></div></div>
+      <div class="mbar-track"><div class="mbar-fill" data-target="${((semData/maxBucket)*100).toFixed(2)}" style="background:var(--ink-faint);"></div></div>
       <div class="val sensitive">R$ ${fmtBRL(semData)}</div>
     </div>`;
   }
@@ -527,6 +665,7 @@ function renderFaturamento(){
   });
 
   const empresaOptions = state.clients.map(c=>`<option value="${esc(c.nome)}">`).join('');
+  const animateRows = shouldAnimateRows('notas:'+year);
 
   let rowsHtml;
   if(rows.length===0){
@@ -536,7 +675,7 @@ function renderFaturamento(){
       <thead><tr><th>Empresa</th><th class="data">Data</th><th class="valor">Valor</th><th class="acao"></th></tr></thead>
       <tbody>`;
     rows.forEach(r=>{
-      rowsHtml += `<tr>
+      rowsHtml += `<tr class="${animateRows?'row-enter':''}">
         <td><input class="cell-input" type="text" list="empresa-list" value="${esc(r.empresa)}"
           data-role="nota-field" data-year="${year}" data-row="${r.id}" data-field="empresa"></td>
         <td><input class="cell-input" type="date" value="${esc(r.data||'')}"
@@ -551,6 +690,7 @@ function renderFaturamento(){
   }
 
   const yearOptions = state.notasYears.map(y=>y).join(',');
+  const statusCls = msgClass || 'ok';
 
   return `
     <div class="panel-head">
@@ -563,16 +703,16 @@ function renderFaturamento(){
       </div>
     </div>
 
-    <div class="hero">
+    <div class="hero-card"><div class="hero">
       <div class="gauge-wrap">
         <svg width="150" height="150" viewBox="0 0 150 150">
-          <circle cx="75" cy="75" r="60" fill="none" stroke="rgba(243,236,239,0.08)" stroke-width="12"/>
-          <circle cx="75" cy="75" r="60" fill="none" stroke="${gaugeStroke}" stroke-width="12"
-            stroke-linecap="round" stroke-dasharray="${dash} 376.99"/>
+          <circle cx="75" cy="75" r="60" fill="none" stroke="var(--hairline-strong)" stroke-width="12"/>
+          <circle class="gauge-ring-fill ${statusCls==='ok'?'':statusCls}" cx="75" cy="75" r="60" fill="none" stroke-width="12"
+            stroke-linecap="round" stroke-dasharray="376.99" stroke-dashoffset="376.99"/>
           <defs>
             <linearGradient id="gaugeGrad" x1="0" y1="0" x2="1" y2="1">
-              <stop offset="0%" stop-color="#26425A"/>
-              <stop offset="100%" stop-color="#86A8CF"/>
+              <stop offset="0%" stop-color="var(--slate)"/>
+              <stop offset="100%" stop-color="var(--accent-soft)"/>
             </linearGradient>
           </defs>
         </svg>
@@ -592,7 +732,7 @@ function renderFaturamento(){
           <input class="sensitive" type="text" inputmode="decimal" value="${esc(valorDisplay(limite))}" data-role="limite-field">
         </div>
       </div>
-    </div>
+    </div></div>
 
     <div class="section-title">Por mês</div>
     ${barsHtml}
@@ -1160,5 +1300,26 @@ async function boot(){
   if(ui.tab && ui.tab!=='FATURAMENTO' && ui.tab!=='CONFIG') ensureClientView(ui.tab);
   render();
   attachStaticHandlers();
+
+  // The sliding-pill/gauge/bar geometry is computed from live layout
+  // (offsetLeft/offsetWidth) at render time, so it goes stale if the window
+  // is resized or a phone is rotated without anything else re-rendering —
+  // re-sync it (snapped, no animation) whenever that happens.
+  let resizeTimer = null;
+  window.addEventListener('resize', ()=>{
+    clearTimeout(resizeTimer);
+    resizeTimer = setTimeout(()=>{
+      sliderGeom = {};
+      lastGaugeOffset = null;
+      lastBarWidths = {};
+      requestAnimationFrame(()=>{
+        syncSlider('rail', '.rail-slide-pill', '.rail .tab-btn.active');
+        if(ui.tab && ui.tab!=='FATURAMENTO' && ui.tab!=='CONFIG'){
+          syncSlider('months-'+ui.tab, '.month-slide-pill', '.months .month-pill.active');
+        }
+        if(ui.tab==='FATURAMENTO'){ syncGauge(); syncBars(); }
+      });
+    }, 150);
+  });
 }
 boot();
