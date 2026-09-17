@@ -16,6 +16,11 @@ const SUPABASE_ANON_KEY =
 const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
 window.storage = {
+  // Importante: distingue "linha realmente não existe" (data null, sem
+  // error) de "falha ao buscar" (error, ou exceção de rede) — os dois casos
+  // NÃO podem ser tratados igual, senão uma instabilidade de rede vira
+  // "banco vazio" e acaba sobrescrevendo dados reais com o estado padrão
+  // (já aconteceu no financas-casa, que usa o mesmo padrão de código).
   async get(key) {
     try {
       const { data, error } = await supabase
@@ -23,11 +28,12 @@ window.storage = {
         .select("data")
         .eq("id", key)
         .maybeSingle();
-      if (error || !data) return null;
+      if (error) return { failed: true };
+      if (!data) return { value: null };
       return { value: JSON.stringify(data.data) };
     } catch (e) {
       console.error("Falha ao carregar do Supabase", e);
-      return null;
+      return { failed: true };
     }
   },
   async set(key, value) {
@@ -42,6 +48,23 @@ window.storage = {
     }
   },
 };
+
+// Backup diário rotativo: 1x por dia (por dia da semana, até 7 "fotos"
+// recentes num id separado), sempre a partir de uma leitura que já deu
+// certo — assim, se o salvamento principal algum dia sobrescrever algo
+// errado, ainda dá pra puxar manualmente um desses backups no Supabase.
+const BACKUP_DATE_FLAG = 'jnf-last-backup-date';
+async function backupIfNeeded(goodStateJson) {
+  try {
+    const today = new Date().toISOString().slice(0, 10);
+    if (localStorage.getItem(BACKUP_DATE_FLAG) === today) return;
+    const weekday = new Date().getDay();
+    await window.storage.set(`${STORAGE_KEY}-backup-${weekday}`, goodStateJson);
+    localStorage.setItem(BACKUP_DATE_FLAG, today);
+  } catch (e) {
+    console.error('Falha ao gravar backup diário', e);
+  }
+}
 
 const MESES = [
   {k:'01', nome:'Janeiro'}, {k:'02', nome:'Fevereiro'}, {k:'03', nome:'Março'},
@@ -91,14 +114,23 @@ let state = null;
 let saveTimer = null;
 
 async function loadState(){
-  try{
-    const res = await window.storage.get(STORAGE_KEY, false);
-    if(res && res.value){
-      state = JSON.parse(res.value);
-      migrateState();
-      return;
-    }
-  }catch(e){ /* not found or error -> fall through to default */ }
+  // busca com algumas tentativas: uma instabilidade passageira de rede não
+  // pode ser confundida com "banco vazio" (ver window.storage.get acima) —
+  // se continuar falhando, aborta sem NUNCA gravar nada por cima.
+  let res = await window.storage.get(STORAGE_KEY);
+  for(let tentativa=0; res.failed && tentativa<3; tentativa++){
+    await new Promise(r=>setTimeout(r, 800*(tentativa+1)));
+    res = await window.storage.get(STORAGE_KEY);
+  }
+  if(res.failed){
+    throw new Error('load-failed');
+  }
+  if(res.value){
+    state = JSON.parse(res.value);
+    migrateState();
+    backupIfNeeded(res.value);
+    return;
+  }
   state = defaultState();
   await persist();
 }
@@ -117,21 +149,57 @@ function migrateState(){
   if(!state.notasYears) state.notasYears = Object.keys(state.notas).sort();
 }
 
+// Fila serializada de gravação: sem isso, uma gravação em voo mais lenta
+// (rede instável) pode terminar DEPOIS de uma mais nova e sobrescrever uma
+// edição recente com uma mais velha. Só existe uma gravação em andamento por
+// vez; se `state` mudar de novo enquanto ela está em voo, a próxima dispara
+// assim que a atual terminar, sempre lendo o `state` mais atual.
+let saving = false;
+let pendingRewrite = false;
+async function flushSave(){
+  if(saving){ pendingRewrite = true; return; }
+  saving = true;
+  setSaveIndicator('saving');
+  try{
+    await window.storage.set(STORAGE_KEY, JSON.stringify(state), false);
+    setSaveIndicator('saved');
+  }catch(e){
+    setSaveIndicator('error');
+  }
+  saving = false;
+  if(pendingRewrite){
+    pendingRewrite = false;
+    await flushSave();
+  }
+}
+
 function persist(){
   setSaveIndicator('saving');
   clearTimeout(saveTimer);
   return new Promise(resolve=>{
     saveTimer = setTimeout(async ()=>{
-      try{
-        await window.storage.set(STORAGE_KEY, JSON.stringify(state), false);
-        setSaveIndicator('saved');
-      }catch(e){
-        setSaveIndicator('error');
-      }
+      await flushSave();
       resolve();
     }, 300);
   });
 }
+
+// Se o app for pra segundo plano (troca de app no celular, tela apagando)
+// ou a aba fechar logo depois de uma edição, dispara a gravação pendente na
+// hora — reduz a janela em que a última edição poderia se perder por causa
+// do debounce de 300ms.
+document.addEventListener('visibilitychange', () => {
+  if(document.visibilityState === 'hidden' && state){
+    clearTimeout(saveTimer);
+    flushSave();
+  }
+});
+window.addEventListener('pagehide', () => {
+  if(state){
+    clearTimeout(saveTimer);
+    flushSave();
+  }
+});
 
 function setSaveIndicator(mode){
   const el = document.getElementById('savestate');
@@ -326,7 +394,8 @@ let ui = {
   addingClientTipo: 'fixo', // 'fixo' | 'esporadico'
   deleteArm: {}, // key -> timestamp, for two-step delete buttons
   toast: null,
-  valuesHidden: false // privacy toggle — device-local preference, not synced
+  valuesHidden: false, // privacy toggle — device-local preference, not synced
+  pendingImport: null // {data, fileName} — set while confirming a restore, before it overwrites everything
 };
 
 const PRIVACY_KEY = 'jnf-privacy-hidden';
@@ -360,7 +429,7 @@ function showToast(msg, undoFn){
   const myId = ui.toast.id;
   setTimeout(()=>{
     if(ui.toast && ui.toast.id===myId){ ui.toast=null; render(); }
-  }, 5500);
+  }, 10000);
 }
 
 /* ---------------- rendering ---------------- */
@@ -804,6 +873,15 @@ function renderConfig(){
       <button class="btn" data-action="trigger-import">Restaurar backup</button>
       <input type="file" id="import-file" class="hidden-file" accept="application/json">
     </div>
+    ${ui.pendingImport ? `
+      <div class="import-confirm">
+        <p style="color:var(--danger);font-weight:600;margin:12px 0 8px;">
+          Substituir TODOS os dados atuais pelo arquivo "${esc(ui.pendingImport.fileName)}"? Não dá pra desfazer.
+        </p>
+        <button class="btn danger-step confirming" data-action="confirm-import">Sim, substituir tudo</button>
+        <button class="btn" data-action="cancel-import">Cancelar</button>
+      </div>
+    ` : ''}
   `;
 }
 
@@ -1137,12 +1215,27 @@ function onAppClickInner(e){
       return;
     }
     delete ui.deleteArm[key];
+    const clientIdx = state.clients.findIndex(c=>c.id===id);
+    const removedClient = state.clients[clientIdx];
+    const orderIdx = state.clientOrder.indexOf(id);
+    const removedVideos = state.videos[id];
+    const previousTab = ui.tab;
     state.clients = state.clients.filter(c=>c.id!==id);
     state.clientOrder = state.clientOrder.filter(cid=>cid!==id);
     delete state.videos[id];
     if(ui.tab===id) ui.tab = state.clientOrder[0] || 'FATURAMENTO';
     persist();
     render();
+    if(removedClient){
+      showToast(`Cliente "${removedClient.nome}" excluído.`, () => {
+        state.clients.splice(Math.min(clientIdx, state.clients.length), 0, removedClient);
+        state.clientOrder.splice(Math.min(orderIdx, state.clientOrder.length), 0, id);
+        if(removedVideos !== undefined) state.videos[id] = removedVideos;
+        ui.tab = previousTab === id ? id : previousTab;
+        persist();
+        render();
+      });
+    }
   }
   else if(action==='export-backup'){
     const blob = new Blob([JSON.stringify(state, null, 2)], {type:'application/json'});
@@ -1158,6 +1251,19 @@ function onAppClickInner(e){
   else if(action==='trigger-import'){
     document.getElementById('import-file').click();
   }
+  else if(action==='confirm-import'){
+    if(!ui.pendingImport) return;
+    state = ui.pendingImport.data;
+    migrateState();
+    ui.pendingImport = null;
+    persist();
+    render();
+    showToast('Backup restaurado com sucesso.');
+  }
+  else if(action==='cancel-import'){
+    ui.pendingImport = null;
+    render();
+  }
   else if(action==='toast-undo'){
     const fn = ui.toast && ui.toast.undoFn;
     ui.toast = null;
@@ -1170,20 +1276,20 @@ function onImportFile(e){
   const file = e.target.files[0];
   if(!file) return;
   const reader = new FileReader();
-  reader.onload = async () => {
+  reader.onload = () => {
     try{
       const parsed = JSON.parse(reader.result);
       if(!parsed.clients || !parsed.business){ throw new Error('formato inválido'); }
-      state = parsed;
-      migrateState();
-      await persist();
+      // não aplica na hora — pede confirmação, já que isso substitui TODOS os
+      // dados atuais (notas, vídeos, clientes) sem volta.
+      ui.pendingImport = {data: parsed, fileName: file.name};
       render();
-      showToast('Backup restaurado com sucesso.');
     }catch(err){
       showToast('Não consegui ler esse arquivo. Confira se é um backup válido (.json).');
     }
   };
   reader.readAsText(file);
+  e.target.value = '';
 }
 
 /* ---------------- PDF report ---------------- */
@@ -1295,7 +1401,17 @@ function generatePDF(clientId, ym){
 
 /* ---------------- boot ---------------- */
 async function boot(){
-  await loadState();
+  try{
+    await loadState();
+  }catch(e){
+    document.getElementById('app').innerHTML =
+      '<div style="max-width:420px;margin:80px auto;padding:24px;text-align:center;font-family:sans-serif;color:#333">' +
+      'Não foi possível carregar seus dados. Verifique sua internet e recarregue a página — ' +
+      'por segurança, nada será salvo até conseguir carregar corretamente.' +
+      '<div style="margin-top:16px"><button onclick="location.reload()" style="padding:10px 22px;border-radius:999px;border:none;background:#1B263B;color:#fff;font-weight:700;cursor:pointer">Tentar de novo</button></div>' +
+      '</div>';
+    return;
+  }
   ui.tab = state.clientOrder[0] || 'FATURAMENTO';
   if(ui.tab && ui.tab!=='FATURAMENTO' && ui.tab!=='CONFIG') ensureClientView(ui.tab);
   render();
