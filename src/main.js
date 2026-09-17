@@ -283,10 +283,14 @@ function syncSlider(key, pillSel, activeSel){
   const target = {left:active.offsetLeft, top:active.offsetTop, width:active.offsetWidth, height:active.offsetHeight};
   const reduced = prefersReducedMotion();
   const prev = sliderGeom[key];
-  if(prev && !reduced){
+  // Sem geometria anterior (primeiro paint) o pill partiria de 0,0 e
+  // deslizaria ate o lugar — por meio segundo ele aponta o mes errado.
+  // Entao a primeira colocacao e feita sem transicao, no destino.
+  const snapTo = prev || target;
+  if(!reduced){
     pill.style.transition = 'none';
-    pill.style.transform = `translate(${prev.left}px,${prev.top}px)`;
-    pill.style.width = prev.width+'px'; pill.style.height = prev.height+'px';
+    pill.style.transform = `translate(${snapTo.left}px,${snapTo.top}px)`;
+    pill.style.width = snapTo.width+'px'; pill.style.height = snapTo.height+'px';
     pill.offsetHeight; // force reflow so the "no transition" snap actually commits
     pill.style.transition = '';
   }
@@ -347,10 +351,7 @@ function shouldAnimateRows(scopeKey){
 }
 
 /* ---------------- small inline icons (rail nav + stats row) ---------------- */
-function iconBars(size=15){return `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 20V10M12 20V4M20 20v-7"/></svg>`;}
-function iconCalendar(size=15){return `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="3"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>`;}
 function iconGauge(size=15){return `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 21a9 9 0 1 0-9-9"/><path d="M12 12l4-4"/></svg>`;}
-function iconUsers(size=15){return `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8" r="3.2"/><path d="M2.5 20c0-3.5 3-6 6.5-6s6.5 2.5 6.5 6"/><circle cx="17.5" cy="9" r="2.6"/><path d="M15.8 14.3c2.4.5 4.2 2.5 4.2 5.2"/></svg>`;}
 function iconGear(size=15){return `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3.2"/><path d="M19.4 13a7.6 7.6 0 0 0 0-2l2-1.6-2-3.4-2.4 1a7.7 7.7 0 0 0-1.7-1L15 3h-6l-.3 2.6a7.7 7.7 0 0 0-1.7 1l-2.4-1-2 3.4L4.6 11a7.6 7.6 0 0 0 0 2l-2 1.6 2 3.4 2.4-1a7.7 7.7 0 0 0 1.7 1L9 21h6l.3-2.6a7.7 7.7 0 0 0 1.7-1l2.4 1 2-3.4-2-1.6Z"/></svg>`;}
 
 function getVideos(clientId, ym){
@@ -445,31 +446,55 @@ function todosClientesMesTotal(ym){
 function renderStatsRow(){
   const ymAtual = monthKey(REAL_YEAR, REAL_MONTH);
   const totalMesAtual = todosClientesMesTotal(ymAtual);
-  const {pctClamped, msgClass} = limiteProgress(REAL_YEAR);
+  const {total, limite, pctClamped, msgClass, restante} = limiteProgress(REAL_YEAR);
   const statusCls = msgClass || 'ok';
   const statusLabel = statusCls==='danger' ? 'Limite excedido' : statusCls==='warn' ? 'Atenção' : 'Tranquilo';
+
+  // quanto do ano ja passou, em %: a marca de ritmo na barra. Barra atras
+  // da marca = faturando abaixo do que o limite comportaria.
+  const mesesDecorridos = parseInt(REAL_MONTH, 10);
+  const pacePct = Math.min((mesesDecorridos/12)*100, 100);
+
+  let msg;
+  if(restante < 0){
+    msg = `Limite ultrapassado em <b>R$ ${fmtBRL(Math.abs(restante))}</b>. Fique atento ao desenquadramento.`;
+  } else if(total > 0){
+    const projecao = (total/mesesDecorridos)*12;
+    const folga = limite - projecao;
+    msg = folga >= 0
+      ? `No ritmo atual fecha dezembro em <b class="sensitive">R$ ${fmtBRL(projecao)}</b> — R$ ${fmtBRL(folga)} de folga.`
+      : `No ritmo atual fecha dezembro em <b class="sensitive">R$ ${fmtBRL(projecao)}</b> — R$ ${fmtBRL(Math.abs(folga))} acima do limite.`;
+  } else {
+    msg = `Nenhuma nota lançada em ${REAL_YEAR} ainda.`;
+  }
+
   return `
     <div class="stats-row">
-      <div class="stat-card">
-        <div class="stat-icon">${iconBars()}</div>
-        <div class="stat-label">Faturamento de ${MES_NOME[REAL_MONTH]}</div>
-        <div class="stat-value sensitive">R$ ${fmtBRL(totalMesAtual)}</div>
+      <div class="stat-hero">
+        <div class="stat-hero-head">
+          <div class="stat-label">Ainda cabe no limite de ${REAL_YEAR}</div>
+          <span class="stat-pill ${statusCls}">${statusLabel}</span>
+        </div>
+        <div class="stat-hero-value sensitive">R$ ${fmtBRL(Math.max(restante,0))}</div>
+        <div class="limit-bar">
+          <div class="limit-fill ${msgClass}" style="width:${pctClamped.toFixed(1)}%"></div>
+          <div class="limit-pace" style="left:${pacePct.toFixed(1)}%" title="ritmo do ano"></div>
+        </div>
+        <div class="limit-foot">
+          <span>${pctClamped.toFixed(1).replace('.',',')}% usado</span>
+          <span class="pace">ritmo do ano: ${pacePct.toFixed(0)}%</span>
+        </div>
+        <div class="stat-hero-msg">${msg}</div>
       </div>
-      <div class="stat-card">
-        <div class="stat-icon">${iconCalendar()}</div>
-        <div class="stat-label">Faturado em ${REAL_YEAR}</div>
-        <div class="stat-value sensitive">R$ ${fmtBRL(notasYearTotal(REAL_YEAR))}</div>
-      </div>
-      <div class="stat-card">
-        <div class="stat-icon">${iconGauge()}</div>
-        <div class="stat-label">Limite MEI usado</div>
-        <div class="stat-value">${pctClamped.toFixed(1).replace('.',',')}%</div>
-        <div class="stat-foot"><span class="stat-pill ${statusCls}">${statusLabel}</span></div>
-      </div>
-      <div class="stat-card">
-        <div class="stat-icon">${iconUsers()}</div>
-        <div class="stat-label">Clientes ativos</div>
-        <div class="stat-value">${state.clients.length}</div>
+      <div class="stat-side">
+        <div class="stat-card-sm">
+          <div class="stat-label">${MES_NOME[REAL_MONTH]}</div>
+          <div class="stat-value sensitive">R$ ${fmtBRL(totalMesAtual)}</div>
+        </div>
+        <div class="stat-card-sm">
+          <div class="stat-label">Faturado em ${REAL_YEAR}</div>
+          <div class="stat-value sensitive">R$ ${fmtBRL(total)}</div>
+        </div>
       </div>
     </div>
   `;
@@ -580,12 +605,24 @@ function attachHandlers(){
     syncSlider('rail', '.rail-slide-pill', '.rail .tab-btn.active');
     if(ui.tab && ui.tab!=='FATURAMENTO' && ui.tab!=='CONFIG'){
       syncSlider('months-'+ui.tab, '.month-slide-pill', '.months .month-pill.active');
+      scrollActiveMonthIntoView();
     }
     if(ui.tab==='FATURAMENTO'){
       syncGauge();
       syncBars();
     }
   });
+}
+
+// Numa tela estreita a tira de meses nao cabe inteira, e ela abre sempre
+// em Janeiro — o mes selecionado fica fora de vista.
+function scrollActiveMonthIntoView(){
+  const strip = document.querySelector('.months');
+  const active = document.querySelector('.months .month-pill.active');
+  if(!strip || !active) return;
+  if(strip.scrollWidth <= strip.clientWidth) return;
+  const alvo = active.offsetLeft - (strip.clientWidth - active.offsetWidth)/2;
+  strip.scrollTo({left: Math.max(alvo, 0), behavior: prefersReducedMotion() ? 'auto' : 'smooth'});
 }
 
 function autoResizeTextareas(){
@@ -657,13 +694,13 @@ function renderClientPanel(clientId){
     rows.forEach((r,i)=>{
       rowsHtml += `<tr data-row="${r.id}" class="${animateRows?'row-enter':''}">
         <td class="num">${i+1}</td>
-        <td><input class="cell-input" type="text" value="${esc(r.headline)}"
+        <td class="video"><input class="cell-input" type="text" value="${esc(r.headline)}"
           data-role="video-field" data-client="${clientId}" data-ym="${ym}" data-row="${r.id}" data-field="headline" placeholder="Nome do vídeo"></td>
-        <td><input class="cell-input" type="text" value="${esc(r.subcliente)}"
+        <td class="cliente"><input class="cell-input" type="text" value="${esc(r.subcliente)}"
           data-role="video-field" data-client="${clientId}" data-ym="${ym}" data-row="${r.id}" data-field="subcliente" placeholder="Cliente final"></td>
-        <td><input class="cell-input" type="date" value="${esc(r.data)}"
+        <td class="data"><input class="cell-input" type="date" value="${esc(r.data)}"
           data-role="video-field" data-client="${clientId}" data-ym="${ym}" data-row="${r.id}" data-field="data"></td>
-        <td><div class="valor-wrap"><span class="valor-prefix">R$</span><input class="cell-input valor sensitive" type="text" inputmode="decimal" value="${esc(valorDisplay(r.valor))}"
+        <td class="valor"><div class="valor-wrap"><span class="valor-prefix">R$</span><input class="cell-input valor sensitive" type="text" inputmode="decimal" value="${esc(valorDisplay(r.valor))}"
           data-role="video-field" data-client="${clientId}" data-ym="${ym}" data-row="${r.id}" data-field="valor"></div></td>
         <td class="acao"><button class="icon-btn" title="Excluir vídeo" data-action="delete-video" data-client="${clientId}" data-ym="${ym}" data-row="${r.id}">✕</button></td>
       </tr>`;
