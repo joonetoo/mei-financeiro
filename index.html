@@ -104,9 +104,10 @@ button{cursor:pointer;}
 .row-enter:nth-child(5){animation-delay:.14s;} .row-enter:nth-child(6){animation-delay:.17s;}
 .row-enter:nth-child(7){animation-delay:.20s;} .row-enter:nth-child(8){animation-delay:.23s;}
 
-/* -------- privacy / sensitive values -------- */
-.sensitive{transition:filter .15s ease;}
-body.privacy-on .sensitive{filter:blur(7px);user-select:none;}
+/* -------- privacy / sensitive values --------
+   Bolinhas em vez de desfoque, como em app de banco — cada caractere vira um
+   ponto (o valor real continua ali, so o desenho do texto muda). */
+body.privacy-on .sensitive{-webkit-text-security:disc;user-select:none;}
 
 #app{
   max-width:1180px;
