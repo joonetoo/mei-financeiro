@@ -1350,12 +1350,12 @@ function generatePDF(clientId, ym){
 
   doc.setFont('helvetica','bold');
   doc.setFontSize(18);
-  doc.setTextColor(10,14,31);
+  doc.setTextColor(33,29,24);
   doc.text(b.nomeFantasia || 'Relatório', marginX, 50);
 
   doc.setFont('helvetica','normal');
   doc.setFontSize(9.5);
-  doc.setTextColor(91,104,132);
+  doc.setTextColor(110,103,92);
   let infoY = 68;
   if(b.razaoSocial){ doc.text(b.razaoSocial, marginX, infoY); infoY += 13; }
   if(b.cnpj){ doc.text(`CNPJ: ${b.cnpj}`, marginX, infoY); infoY += 13; }
@@ -1363,16 +1363,16 @@ function generatePDF(clientId, ym){
   if(b.email){ doc.text(b.email, marginX, infoY); infoY += 13; }
   if(b.telefone){ doc.text(b.telefone, marginX, infoY); infoY += 13; }
 
-  doc.setDrawColor(199,214,230);
+  doc.setDrawColor(231,226,216);
   doc.line(marginX, infoY+4, pageWidth-marginX, infoY+4);
 
   doc.setFont('helvetica','bold');
   doc.setFontSize(13);
-  doc.setTextColor(10,14,31);
+  doc.setTextColor(33,29,24);
   doc.text(`Relatório mensal — ${c.nome}`, marginX, infoY+26);
   doc.setFont('helvetica','normal');
   doc.setFontSize(10.5);
-  doc.setTextColor(91,104,132);
+  doc.setTextColor(110,103,92);
   doc.text(`${mesNome} de ${year}`, marginX, infoY+42);
 
   const isEsp = c.tipo==='esporadico';
@@ -1396,9 +1396,9 @@ function generatePDF(clientId, ym){
     margin: {left: marginX, right: marginX},
     head: [isEsp ? ['Nº','Descrição','Valor'] : ['Nº','Vídeo','Cliente','Data','Valor']],
     body: body,
-    styles: { font:'helvetica', fontSize:9.5, textColor:[26,32,46], cellPadding:6, lineColor:[214,222,232], lineWidth:0.5 },
-    headStyles: { fillColor:[38,66,90], textColor:[255,255,255], fontStyle:'bold' },
-    alternateRowStyles: { fillColor:[237,241,247] },
+    styles: { font:'helvetica', fontSize:9.5, textColor:[33,29,24], cellPadding:6, lineColor:[236,231,221], lineWidth:0.5 },
+    headStyles: { fillColor:[33,29,24], textColor:[255,255,255], fontStyle:'bold' },
+    alternateRowStyles: { fillColor:[246,242,233] },
     columnStyles: isEsp ? {
       0:{cellWidth:28},
       2:{cellWidth:80, halign:'right'}
@@ -1408,12 +1408,12 @@ function generatePDF(clientId, ym){
       4:{cellWidth:80, halign:'right'}
     },
     foot: isEsp ? [['','Total', 'R$ ' + fmtBRL(total)]] : [['','','','Total', 'R$ ' + fmtBRL(total)]],
-    footStyles: { fillColor:[222,231,241], textColor:[10,14,31], fontStyle:'bold', halign:'right' }
+    footStyles: { fillColor:[220,227,205], textColor:[33,29,24], fontStyle:'bold', halign:'right' }
   });
 
   const finalY = doc.lastAutoTable.finalY + 20;
   doc.setFontSize(9);
-  doc.setTextColor(130,140,156);
+  doc.setTextColor(148,140,127);
   doc.text(isEsp ? `${rows.length} lançamento(s) neste mês.` : `${rows.length} vídeo(s) editado(s) neste mês.`, marginX, finalY);
   doc.text(`Gerado em ${new Date().toLocaleDateString('pt-BR')}`, marginX, finalY+13);
 
