@@ -394,6 +394,7 @@ let ui = {
   metaEditing: false,
   metaDraft: '', // texto sendo digitado na meta — sobrevive a um render() no meio da digitacao
   metaFocus: false,
+  semanasYm: null, // mes do cartao "Semana a semana" (null = mes atual) — so tela, nao e salvo
   confirmClose: null, // 'clientId|ym' enquanto a confirmacao de fechar periodo esta aberta
   tab: null, // clientId | 'FATURAMENTO' | 'CONFIG'
   clientView: {}, // clientId -> {year, month}
@@ -833,6 +834,98 @@ function painelDiaADia(porData, ym){
   </div>`;
 }
 
+// primeiro mes que da pra ver em "Semana a semana": o mais antigo entre as
+// abas de cliente e as datas dos videos (nunca depois do mes atual)
+function semanasPrimeiroYm(porData){
+  const atual = monthKey(REAL_YEAR, REAL_MONTH);
+  let min = atual;
+  Object.values(state.videos||{}).forEach(meses=>{
+    Object.keys(meses||{}).forEach(ym=>{ if(/^\d{4}-\d{2}$/.test(ym) && ym<min) min = ym; });
+  });
+  Object.keys(porData).forEach(iso=>{ const ym = iso.slice(0,7); if(/^\d{4}-\d{2}$/.test(ym) && ym<min) min = ym; });
+  return min;
+}
+
+// mes mostrado no cartao — so tela, nao vai pro banco. null = mes atual.
+function semanasYm(porData){
+  const atual = monthKey(REAL_YEAR, REAL_MONTH);
+  let ym = ui.semanasYm || atual;
+  if(ym > atual) ym = atual;
+  const primeiro = semanasPrimeiroYm(porData);
+  if(ym < primeiro) ym = primeiro;
+  return ym;
+}
+
+// semanas de segunda a domingo, cortadas nas bordas do mes: a soma das
+// semanas bate com o total do mes (conta pela data do video)
+function painelSemanas(porData){
+  const ym = semanasYm(porData);
+  const [ano, mes] = ym.split('-');
+  const mesNome = MES_NOME[mes];
+  const atual = monthKey(REAL_YEAR, REAL_MONTH);
+  const ehAtual = ym===atual;
+  const dim = diasNoMes(ano, mes);
+  const semanas = [];
+  let cur = null;
+  for(let d=1; d<=dim; d++){
+    const iso = `${ym}-${String(d).padStart(2,'0')}`;
+    const dow = new Date(Number(ano), Number(mes)-1, d).getDay();
+    if(!cur || dow===1){ cur = {ini:d, fim:d, v:0, n:0}; semanas.push(cur); }
+    cur.fim = d;
+    const e = porData[iso];
+    if(e){ cur.v += e.v; cur.n += e.n; }
+  }
+  const dia = now.getDate();
+  semanas.forEach(s=>{
+    s.agora = ehAtual && dia>=s.ini && dia<=s.fim;
+    s.futura = ehAtual && s.ini>dia;
+    s.label = s.ini===s.fim ? String(s.ini).padStart(2,'0') : `${String(s.ini).padStart(2,'0')}–${String(s.fim).padStart(2,'0')}`;
+  });
+  const total = semanas.reduce((s,w)=>s+w.v, 0);
+  const nTotal = semanas.reduce((s,w)=>s+w.n, 0);
+  // media so das semanas que ja comecaram (no mes atual as futuras nao contam)
+  const contadas = semanas.filter(s=>!s.futura);
+  const media = contadas.length ? total/contadas.length : 0;
+  const melhor = semanas.reduce((b,s)=>s.v>(b?b.v:0) ? s : b, null);
+  const maxV = Math.max(0, ...semanas.map(s=>s.v));
+  const step = Math.max(100, Math.ceil(maxV/2/100)*100), MAX = step*2;
+  const cols = `grid-template-columns:repeat(${semanas.length},minmax(0,1fr))`;
+  const bars = semanas.map(s=>{
+    if(s.futura && s.v===0) return `<div class="wk fut"><span class="v">&nbsp;</span><i></i></div>`;
+    if(s.v===0) return `<div class="wk zero"><span class="v sensitive">0</span><i></i></div>`;
+    return `<div class="wk${s.agora?' now':''}" title="${s.label}/${mes} · R$ ${fmtBRL(s.v)}"><span class="v sensitive">${fmtCurto(s.v)}</span><i style="height:${(s.v/MAX*100).toFixed(1)}%"></i></div>`;
+  }).join('');
+  const xs = semanas.map(s=>{
+    const sub = s.agora ? 'esta semana' : (s.n ? plural(s.n,'vídeo','vídeos') : '&nbsp;');
+    return `<div class="${s.agora?'t':''}"><b>${s.label}</b><span>${sub}</span></div>`;
+  }).join('');
+  // linha da media sem texto em cima (o texto cobria o valor de alguma
+  // semana); a legenda fica no numero "media por semana" embaixo
+  const avgLine = media>0 ? `<div class="avg" style="bottom:${(media/MAX*100).toFixed(1)}%"></div>` : '';
+  const vazio = total===0 ? `<div class="wempty">Nenhum vídeo em ${mesNome.toLowerCase()}</div>` : '';
+  const podeVoltar = ym > semanasPrimeiroYm(porData);
+  const seta = (dir, ok, rotulo, path)=>`<button type="button" data-action="semanas-mes" data-dir="${dir}" aria-label="${rotulo}"${ok?'':' disabled'}><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="${path}"/></svg></button>`;
+  return `<div class="card card-semanas s12">
+    <div class="head"><span class="label">Semana a semana${novoTag()}</span>
+      <div class="msw" role="group" aria-label="Trocar mês">${seta(-1, podeVoltar, 'Mês anterior', 'm15 18-6-6 6-6')}<span>${mesNome} ${ano}</span>${seta(1, !ehAtual, 'Próximo mês', 'm9 18 6-6-6-6')}</div>
+    </div>
+    <div class="chart">
+      <div class="yaxis sensitive"><span>${fmtCurto(MAX)}</span><span>${fmtCurto(step)}</span><span>0</span></div>
+      <div class="plot">
+        <div class="grid-l" style="bottom:50%"></div>
+        <div class="weeks" style="${cols}">${bars}</div>
+        ${avgLine}${vazio}
+      </div>
+      <div class="wxaxis" style="${cols}">${xs}</div>
+    </div>
+    <div class="stats3">
+      <div><b class="sensitive">${total>0 ? 'R$ '+fmtBRL(total) : '—'}</b><span>total de ${mesNome.toLowerCase()}${nTotal ? ' · '+plural(nTotal,'vídeo','vídeos') : ''}</span></div>
+      <div><b class="sensitive">${media>0 ? 'R$ '+fmtBRL(media) : '—'}</b><span>${media>0 ? '<i class="avg-key" aria-hidden="true"></i>' : ''}média por semana</span></div>
+      <div><b class="sensitive">${melhor ? 'R$ '+fmtBRL(melhor.v) : '—'}</b><span>melhor semana${melhor ? ' · '+melhor.label+'/'+mes : ''}</span></div>
+    </div>
+  </div>`;
+}
+
 function painelClientes(ym){
   const mesNome = MES_NOME[REAL_MONTH].toLowerCase();
   const prod = producaoDoMes(ym);
@@ -935,6 +1028,7 @@ function renderPainel(){
     ${painelAno()}
     ${painelDiaADia(porData, ym)}
     ${painelClientes(ym)}
+    ${painelSemanas(porData)}
     ${painelNotas()}
     ${painelRecentes()}
   </div>`;
@@ -1565,6 +1659,13 @@ function onAppClickInner(e){
     ui.metaEditing = false;
     render();
     window.scrollTo({top:0});
+  }
+  else if(action==='semanas-mes'){
+    // so troca o mes mostrado no cartao "Semana a semana" — nada e salvo
+    const porData = videosPorData();
+    const alvo = shiftYm(semanasYm(porData), Number(btn.dataset.dir)||0);
+    ui.semanasYm = alvo===monthKey(REAL_YEAR, REAL_MONTH) ? null : alvo;
+    render();
   }
   else if(action==='meta-edit'){
     const meta = metaDoMes(monthKey(REAL_YEAR, REAL_MONTH));
