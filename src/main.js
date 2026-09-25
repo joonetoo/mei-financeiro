@@ -784,9 +784,28 @@ function painelSemana(porData){
 function painelAno(){
   const total = notasYearTotal(REAL_YEAR);
   const n = (state.notas[REAL_YEAR]||[]).length;
+  const media = total / Number(REAL_MONTH); // jan ate o mes atual
+  const rodape = `<div class="kv"><span>${plural(n,'nota','notas')}</span><span>média <b class="sensitive">R$ ${fmtBRL(media)}</b>/mês</span></div>`;
+  // comparacao com o ano anterior inteiro (so aparece se houver notas nele)
+  const anoAnt = String(Number(REAL_YEAR)-1);
+  const totalAnt = notasYearTotal(anoAnt);
+  let comp = '';
+  if(totalAnt > 0){
+    const maior = Math.max(total, totalAnt);
+    const pct = Math.floor(total/totalAnt*100);
+    const msg = total < totalAnt
+      ? `Já é <b>${pct}%</b> de tudo que faturou em ${anoAnt} (<span class="sensitive">R$ ${fmtBRL(totalAnt)}</span>). Faltam <b class="sensitive">R$ ${fmtBRL(totalAnt-total)}</b> pra empatar.`
+      : `Já passou ${anoAnt} inteiro (<span class="sensitive">R$ ${fmtBRL(totalAnt)}</span>) em <b class="sensitive">R$ ${fmtBRL(total-totalAnt)}</b>.`;
+    comp = `<div class="cmp">
+      <div class="row"><span>${REAL_YEAR}</span><span class="track"><i class="cur" style="width:${(total/maior*100).toFixed(1)}%"></i></span></div>
+      <div class="row"><span>${anoAnt} todo</span><span class="track"><i style="width:${(totalAnt/maior*100).toFixed(1)}%"></i></span></div>
+    </div>
+    <p class="msg">${msg}</p>`;
+  }
   return `<div class="card card-year s3">
     <span class="label">Faturado em ${REAL_YEAR}</span><span class="big sensitive">R$ ${fmtBRL(total)}</span>
-    <p class="sub">${plural(n,'nota emitida','notas emitidas')}</p>
+    ${comp}
+    ${rodape}
   </div>`;
 }
 
