@@ -683,7 +683,7 @@ function painelLimite(){
   } else {
     msg = `Nenhuma nota lançada em ${REAL_YEAR} ainda.`;
   }
-  return `<div class="card card-hero s7">
+  return `<div class="card card-hero s5">
     <div class="head"><span class="label">Ainda cabe no limite de ${REAL_YEAR}</span><span class="pill ${statusCls}">${statusLabel}</span></div>
     <div class="big sensitive">R$ ${fmtBRL(Math.max(restante,0))}</div>
     <div class="bar"><div class="fill ${msgClass}" style="width:${pctClamped.toFixed(1)}%"></div><div class="pace" style="left:${pacePct.toFixed(1)}%" title="ritmo do ano"></div></div>
@@ -698,7 +698,7 @@ function painelMeta(ym){
   const meta = metaDoMes(ym);
   const head = r => `<div class="head"><span class="label">Meta de ${mesNome}${novoTag()}</span>${r||''}</div>`;
   if(ui.metaEditing){
-    return `<div class="card card-meta s5">${head()}
+    return `<div class="card card-meta s4">${head()}
       <form class="meta-form" data-meta-form>
         <label for="meta-in">Quanto quer faturar em ${mesNome}?</label>
         <div class="money-in"><span>R$</span><input id="meta-in" inputmode="decimal" autocomplete="off" value="${esc(ui.metaDraft)}" placeholder="0,00"></div>
@@ -708,7 +708,7 @@ function painelMeta(ym){
     </div>`;
   }
   if(!meta){
-    return `<div class="card card-meta s5">${head()}
+    return `<div class="card card-meta s4">${head()}
       <div class="vrow"><span class="big sensitive">R$ ${fmtBRL(fat)}</span><span class="of">faturado até agora</span></div>
       <p class="msg">Defina quanto quer faturar este mês e o app mostra se você está perto ou longe.</p>
       <button class="btn-dark" style="align-self:flex-start" type="button" data-action="meta-edit">Definir meta do mês</button>
@@ -730,7 +730,7 @@ function painelMeta(ym){
       : `Faltam <b class="sensitive">R$ ${fmtBRL(falta)}</b> e o mês termina hoje.`;
   }
   const editBtn = `<button class="edit-btn" type="button" data-action="meta-edit" aria-label="Editar meta"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>Editar</button>`;
-  return `<div class="card card-meta s5">${head(`<span class="head-r">${pill}${editBtn}</span>`)}
+  return `<div class="card card-meta s4">${head(`<span class="head-r">${pill}${editBtn}</span>`)}
     <div class="vrow"><span class="big sensitive">R$ ${fmtBRL(fat)}</span><span class="of sensitive">de R$ ${fmtBRL(meta)}</span></div>
     <div class="bar"><div class="fill" style="width:${Math.min(pct,100).toFixed(1)}%"></div><div class="pace" style="left:${pace.toFixed(1)}%"></div></div>
     <div class="foot"><span>${pct.toFixed(1).replace('.',',')}% da meta</span><span class="pace-t">dia ${dia} de ${dim}</span></div>
@@ -741,7 +741,7 @@ function painelMeta(ym){
 function painelHoje(porData){
   const hoje = porData[TODAY_ISO] || {v:0, n:0};
   const ontem = porData[addDays(TODAY_ISO,-1)] || {v:0, n:0};
-  return `<div class="card s3">
+  return `<div class="card s4">
     <span class="label">Hoje${novoTag()}</span><span class="big sensitive">R$ ${fmtBRL(hoje.v)}</span>
     <p class="sub">${DIA_SEMANA[now.getDay()]}, ${ddmm(TODAY_ISO)} · ${plural(hoje.n,'vídeo','vídeos')}</p>
     <p class="sub">Ontem: <b class="sensitive">R$ ${fmtBRL(ontem.v)}</b></p>
@@ -774,7 +774,7 @@ function painelSemana(porData){
   }).join('');
   const intervalo = seg.slice(5,7)===dom.slice(5,7) ? `${seg.slice(8,10)} a ${ddmm(dom)}` : `${ddmm(seg)} a ${ddmm(dom)}`;
   const passadaLabel = idxHoje===6 ? 'Semana passada' : `Semana passada até ${DIA_SEMANA_LONGO[idxHoje]}`;
-  return `<div class="card card-week s6">
+  return `<div class="card card-week s8">
     <div class="left"><span class="label">Esta semana${novoTag()}</span><span class="big sensitive">R$ ${fmtBRL(total)}</span>
     <p class="sub">${intervalo} · ${plural(n,'vídeo','vídeos')}</p><p class="sub">${passadaLabel}: <b class="sensitive">R$ ${fmtBRL(passada)}</b></p></div>
     <div class="wbars" role="img" aria-label="Faturamento por dia desta semana">${bars}</div>
@@ -1020,12 +1020,12 @@ function renderPainel(){
   const ym = monthKey(REAL_YEAR, REAL_MONTH);
   const porData = videosPorData();
   return `<div class="dash${ui.screenAnim ? ' screen-in' : ''}">
+    ${painelAno()}
     ${painelLimite()}
     ${painelMeta(ym)}
     ${painelCobrar()}
     ${painelHoje(porData)}
     ${painelSemana(porData)}
-    ${painelAno()}
     ${painelDiaADia(porData, ym)}
     ${painelClientes(ym)}
     ${painelSemanas(porData)}
