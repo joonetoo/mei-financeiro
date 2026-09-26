@@ -25,16 +25,62 @@ window.storage = {
     try {
       const { data, error } = await supabase
         .from("app_data")
-        .select("data")
+        .select("data, updated_at")
         .eq("id", key)
         .maybeSingle();
       if (error) return { failed: true };
       if (!data) return { value: null };
-      return { value: JSON.stringify(data.data) };
+      return { value: JSON.stringify(data.data), updatedAt: data.updated_at };
     } catch (e) {
       console.error("Falha ao carregar do Supabase", e);
       return { failed: true };
     }
+  },
+  // so a "hora da ultima gravacao" da linha (leve) — pra saber se outro
+  // aparelho salvou algo desde a ultima vez que este leu
+  async getStamp(key) {
+    try {
+      const { data, error } = await supabase
+        .from("app_data")
+        .select("updated_at")
+        .eq("id", key)
+        .maybeSingle();
+      if (error) return { failed: true };
+      return { updatedAt: data ? data.updated_at : null };
+    } catch (e) {
+      return { failed: true };
+    }
+  },
+  // Grava SO se ninguem gravou desde `esperado` (a hora da versao que este
+  // aparelho tem). Sem isso, um aparelho com dados velhos (app aberto ha
+  // horas no Mac) apagava o que o outro lancou (celular). Devolve
+  // {conflict:true} se a linha mudou; lanca erro se a rede falhar.
+  async setIfUnchanged(key, value, esperado, novoCarimbo) {
+    const parsed = JSON.parse(value);
+    if (!esperado) {
+      // linha ainda nao existe (primeiro uso): cria; se alguem criou antes, e conflito
+      const { error } = await supabase
+        .from("app_data")
+        .insert({ id: key, data: parsed, updated_at: novoCarimbo });
+      if (error) {
+        if (error.code === "23505") return { conflict: true };
+        console.error("Falha ao salvar no Supabase", error);
+        throw error;
+      }
+      return { ok: true };
+    }
+    const { data, error } = await supabase
+      .from("app_data")
+      .update({ data: parsed, updated_at: novoCarimbo })
+      .eq("id", key)
+      .eq("updated_at", esperado)
+      .select("updated_at");
+    if (error) {
+      console.error("Falha ao salvar no Supabase", error);
+      throw error;
+    }
+    if (!data || data.length === 0) return { conflict: true };
+    return { ok: true };
   },
   // Lança erro se a gravação falhar — quem chama precisa saber, senão o app
   // mostra "salvo" com a edição ainda só na memória do aparelho.
@@ -132,6 +178,13 @@ const STORAGE_KEY = (import.meta.env.DEV && import.meta.env.VITE_STORAGE_KEY) ||
 let state = null;
 let saveTimer = null;
 
+// hora da ultima gravacao da linha que ESTE aparelho conhece (a versao que
+// ele tem na memoria). Serve pra nunca gravar por cima de algo que outro
+// aparelho salvou depois (ver setIfUnchanged).
+let lastSyncedAt = null;
+// true = tem edicao feita aqui que ainda nao foi pra nuvem
+let dirty = false;
+
 async function loadState(){
   // busca com algumas tentativas: uma instabilidade passageira de rede não
   // pode ser confundida com "banco vazio" (ver window.storage.get acima) —
@@ -146,11 +199,13 @@ async function loadState(){
   }
   if(res.value){
     state = JSON.parse(res.value);
+    lastSyncedAt = res.updatedAt || null;
     migrateState();
     backupIfNeeded(res.value);
     return;
   }
   state = defaultState();
+  lastSyncedAt = null;
   await persist();
 }
 
@@ -186,25 +241,71 @@ let pendingRewrite = false;
 let retryTimer = null;
 async function flushSave(){
   if(saving){ pendingRewrite = true; return; }
-  saving = true;
   clearTimeout(retryTimer);
+  if(!dirty){ setSaveIndicator('saved'); return; } // nada editado aqui: nao grava nada
+  saving = true;
   setSaveIndicator('saving');
+  dirty = false; // edicoes feitas durante a gravacao marcam de novo (persist)
+  const json = JSON.stringify(state);
+  const carimbo = new Date().toISOString();
+  let conflito = false;
   try{
-    await window.storage.set(STORAGE_KEY, JSON.stringify(state), false);
-    setSaveIndicator('saved');
+    const r = await window.storage.setIfUnchanged(STORAGE_KEY, json, lastSyncedAt, carimbo);
+    if(r.conflict) conflito = true;
+    else { lastSyncedAt = carimbo; setSaveIndicator('saved'); }
   }catch(e){
     // a edição continua na memória: avisa e tenta de novo sozinho, até dar certo
+    dirty = true;
     setSaveIndicator('error');
     retryTimer = setTimeout(()=>{ flushSave(); }, 5000);
   }
   saving = false;
+  if(conflito){ await resolverConflito(json); return; }
   if(pendingRewrite){
     pendingRewrite = false;
     await flushSave();
   }
 }
 
+// Outro aparelho salvou depois da versao que este tinha, e este tambem tinha
+// edicao. Nunca grava por cima: guarda a versao DESTE aparelho numa linha
+// separada (nada se perde), carrega a mais nova e avisa na tela.
+async function resolverConflito(jsonLocal){
+  const d = new Date();
+  const hora = `${String(d.getHours()).padStart(2,'0')}${String(d.getMinutes()).padStart(2,'0')}${String(d.getSeconds()).padStart(2,'0')}`;
+  const idCopia = `${STORAGE_KEY}-conflito-${localISO(d)}-${hora}`;
+  try{
+    await window.storage.set(idCopia, jsonLocal);
+  }catch(e){
+    // sem conseguir guardar a copia, nao troca nada: segura a edicao e tenta de novo
+    dirty = true;
+    setSaveIndicator('error');
+    retryTimer = setTimeout(()=>{ flushSave(); }, 5000);
+    return;
+  }
+  const res = await window.storage.get(STORAGE_KEY);
+  if(res.failed || !res.value){
+    dirty = true;
+    setSaveIndicator('error');
+    retryTimer = setTimeout(()=>{ flushSave(); }, 5000);
+    return;
+  }
+  // edicoes feitas enquanto isso tambem estao na copia? a copia e de antes;
+  // se houve edicao nova no meio, guarda de novo junto
+  if(dirty){ try{ await window.storage.set(idCopia, JSON.stringify(state)); }catch(e){} }
+  state = JSON.parse(res.value);
+  lastSyncedAt = res.updatedAt || null;
+  migrateState();
+  dirty = false;
+  pendingRewrite = false;
+  clearTimeout(saveTimer);
+  ui.conflito = {quando: `${ddmm(localISO(d))} às ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`, id: idCopia};
+  setSaveIndicator('saved');
+  renderPreserveFocus();
+}
+
 function persist(){
+  dirty = true;
   setSaveIndicator('saving');
   clearTimeout(saveTimer);
   return new Promise(resolve=>{
@@ -215,22 +316,49 @@ function persist(){
   });
 }
 
+// Busca a versao mais nova da nuvem quando outro aparelho salvou algo — so se
+// este aparelho nao tiver edicao pendente (assim nunca descarta nada daqui).
+let puxando = false;
+async function puxarSeMudou(){
+  if(!state || dirty || saving || puxando) return;
+  puxando = true;
+  try{
+    const s = await window.storage.getStamp(STORAGE_KEY);
+    if(s.failed || !s.updatedAt) return;
+    if(lastSyncedAt && Date.parse(s.updatedAt) === Date.parse(lastSyncedAt)) return;
+    const res = await window.storage.get(STORAGE_KEY);
+    if(res.failed || !res.value) return;
+    if(dirty || saving) return; // editou enquanto buscava: fica com a daqui
+    state = JSON.parse(res.value);
+    lastSyncedAt = res.updatedAt || null;
+    migrateState();
+    ui.toast = null; // um "Desfazer" aberto apontaria pra versao antiga
+    renderPreserveFocus();
+  }finally{
+    puxando = false;
+  }
+}
+
 // Se o app for pra segundo plano (troca de app no celular, tela apagando)
 // ou a aba fechar logo depois de uma edição, dispara a gravação pendente na
 // hora — reduz a janela em que a última edição poderia se perder por causa
-// do debounce de 300ms.
+// do debounce de 300ms. SO grava se houver edicao (dirty): gravar sem editar
+// era o que fazia um aparelho com dados velhos apagar o que o outro lancou.
 document.addEventListener('visibilitychange', () => {
   if(document.visibilityState === 'hidden' && state){
-    clearTimeout(saveTimer);
-    flushSave();
-  } else if(document.visibilityState === 'visible' && state && refreshToday()){
-    renderPreserveFocus();
+    if(dirty){ clearTimeout(saveTimer); flushSave(); }
+  } else if(document.visibilityState === 'visible' && state){
+    if(refreshToday()) renderPreserveFocus();
+    puxarSeMudou();
   }
 });
+window.addEventListener('focus', () => { puxarSeMudou(); });
 // app aberto na tela durante a meia-noite (computador): vira o dia tambem
 setInterval(()=>{ if(state && document.visibilityState==='visible' && refreshToday()) renderPreserveFocus(); }, 60000);
+// janela do Mac que fica aberta o dia todo sem sair da tela: confere a cada 30s
+setInterval(()=>{ if(document.visibilityState==='visible') puxarSeMudou(); }, 30000);
 window.addEventListener('pagehide', () => {
-  if(state){
+  if(state && dirty){
     clearTimeout(saveTimer);
     flushSave();
   }
@@ -360,6 +488,10 @@ function getVideos(clientId, ym){
   if(!state.videos[clientId][ym]) state.videos[clientId][ym] = [];
   return state.videos[clientId][ym];
 }
+// so leitura: nao cria mes vazio nos dados (getVideos cria — use so pra editar)
+function videosDe(clientId, ym){
+  return (state.videos[clientId] && state.videos[clientId][ym]) || [];
+}
 function monthTotal(clientId, ym){
   const rows = (state.videos[clientId] && state.videos[clientId][ym]) || [];
   return rows.reduce((s,r)=> s + (parseBRL(r.valor)), 0);
@@ -404,6 +536,7 @@ let ui = {
   deleteArm: {}, // key -> timestamp, for two-step delete buttons
   toast: null,
   valuesHidden: false, // privacy toggle — device-local preference, not synced
+  conflito: null, // {quando, id} — aviso de que outro aparelho salvou por cima (ver resolverConflito)
   pendingImport: null // {data, fileName} — set while confirming a restore, before it overwrites everything
 };
 
@@ -575,8 +708,12 @@ function periodoStatusHtml(cid, ym, total){
   const f = fechamentoDe(cid, ym);
   if(periodoFechado(cid, ym)){
     const diverge = Math.abs(parseBRL(f.valor) - total) > 0.004;
+    const notaSumiu = f.notaId && !acharNota(f.notaId);
+    const aviso = notaSumiu
+      ? ` <b class="warn-t">A nota deste período foi apagada de Notas emitidas — reabra e feche de novo pra lançar outra.</b>`
+      : diverge ? ` <b class="warn-t">O total agora é <span class="sensitive">R$ ${fmtBRL(total)}</span> — reabra e feche de novo pra atualizar a nota.</b>` : '';
     return `<div class="periodo-banner">
-      <span>✓ Período fechado em ${ddmm(f.data)} · nota de <b class="sensitive">R$ ${fmtBRL(parseBRL(f.valor))}</b> lançada em Notas emitidas.${diverge ? ` <b class="warn-t">O total agora é <span class="sensitive">R$ ${fmtBRL(total)}</span> — reabra e feche de novo pra atualizar a nota.</b>` : ''}</span>
+      <span>✓ Período fechado em ${ddmm(f.data)} · nota de <b class="sensitive">R$ ${fmtBRL(parseBRL(f.valor))}</b>${notaSumiu ? '' : ' lançada em Notas emitidas'}.${aviso}</span>
       <button type="button" data-action="reabrir-periodo" data-client="${cid}" data-ym="${ym}">Reabrir período</button>
     </div>`;
   }
@@ -1087,6 +1224,7 @@ function render(){
       </div>
       ${saveStateHtml()}
     </div>
+    ${ui.conflito ? renderConflito() : ''}
     ${painel ? renderPainel() : `
     <div class="layout${ui.screenAnim ? ' screen-in' : ''}">
       ${renderRail()}
@@ -1154,6 +1292,14 @@ function renderMain(){
   if(ui.tab==='FATURAMENTO') return renderFaturamento();
   if(ui.tab==='CONFIG') return renderConfig();
   return renderClientPanel(ui.tab);
+}
+
+function renderConflito(){
+  return `<div class="conflito-banner" role="alert">
+    <span><b>Este aparelho estava com uma versão antiga</b> — o app foi atualizado em outro aparelho. Carreguei a versão mais nova.
+    A última alteração feita aqui (${esc(ui.conflito.quando)}) ficou guardada à parte, nada foi perdido: se faltar alguma coisa, dá pra recuperar.</span>
+    <button type="button" data-action="conflito-ok">Entendi</button>
+  </div>`;
 }
 
 function renderToast(){
@@ -1244,7 +1390,7 @@ function renderClientPanel(clientId){
   if(!c){ return '<div class="empty-hint">Selecione uma aba.</div>'; }
   const view = ensureClientView(clientId);
   const ym = monthKey(view.year, view.month);
-  const rows = getVideos(clientId, ym);
+  const rows = videosDe(clientId, ym);
   const total = monthTotal(clientId, ym);
 
   let monthsHtml = '<div class="months"><div class="month-slide-pill"></div>';
@@ -1477,7 +1623,7 @@ function renderConfig(){
     ${ui.pendingImport ? `
       <div class="import-confirm">
         <p style="color:var(--danger);font-weight:600;margin:12px 0 8px;">
-          Substituir TODOS os dados atuais pelo arquivo "${esc(ui.pendingImport.fileName)}"? Não dá pra desfazer.
+          Substituir TODOS os dados atuais pelo arquivo "${esc(ui.pendingImport.fileName)}"? Logo depois dá pra desfazer por 10 segundos.
         </p>
         <button class="btn danger-step confirming" data-action="confirm-import">Sim, substituir tudo</button>
         <button class="btn" data-action="cancel-import">Cancelar</button>
@@ -1604,26 +1750,35 @@ function onAppFocusOut(e){
   if(!t || !t.dataset || !t.dataset.role) return;
   const role = t.dataset.role;
   let formatted = null;
+  let antes, depois;
 
   if(role==='video-field' && t.dataset.field==='valor'){
     const rows = getVideos(t.dataset.client, t.dataset.ym);
     const row = rows.find(r=>r.id===t.dataset.row);
     if(!row) return;
+    antes = row.valor;
     row.valor = parseBRL(row.valor);
+    depois = row.valor;
     formatted = fmtBRL(row.valor);
   } else if(role==='nota-field' && t.dataset.field==='valor'){
     const rows = state.notas[t.dataset.year] || [];
     const row = rows.find(r=>r.id===t.dataset.row);
     if(!row) return;
+    antes = row.valor;
     row.valor = parseBRL(row.valor);
+    depois = row.valor;
     formatted = fmtBRL(row.valor);
   } else if(role==='client-field' && t.dataset.field==='valorPadrao'){
     const c = clientById(t.dataset.client);
     if(!c) return;
+    antes = c.valorPadrao;
     c.valorPadrao = parseBRL(c.valorPadrao);
+    depois = c.valorPadrao;
     formatted = fmtBRL(c.valorPadrao);
   } else if(role==='limite-field'){
+    antes = state.meiLimiteAnual;
     state.meiLimiteAnual = parseBRL(state.meiLimiteAnual)||81000;
+    depois = state.meiLimiteAnual;
     formatted = fmtBRL(state.meiLimiteAnual);
   } else {
     return;
@@ -1636,7 +1791,8 @@ function onAppFocusOut(e){
   // already be mid-flight, e.g. switching tabs) can replace the DOM out from
   // under that click and make it silently do nothing.
   t.value = formatted;
-  persist();
+  // so arrumou a exibicao ("30" -> "30,00")? nao conta como edicao nem grava
+  if(antes !== depois) persist();
 }
 
 /* ---------------- click handling ---------------- */
@@ -1714,11 +1870,8 @@ function onAppClickInner(e){
     render();
   }
   else if(action==='fat-year-step'){
-    let y = String(Number(ui.fatYear) + Number(btn.dataset.dir));
-    if(!state.notas[y]) state.notas[y] = [];
-    if(!state.notasYears.includes(y)){ state.notasYears.push(y); state.notasYears.sort(); }
-    ui.fatYear = y;
-    persist();
+    // so troca o ano mostrado — o ano so entra nos dados quando ganhar uma nota
+    ui.fatYear = String(Number(ui.fatYear) + Number(btn.dataset.dir));
     render();
   }
   else if(action==='fat-add-year'){
@@ -1779,6 +1932,7 @@ function onAppClickInner(e){
   else if(action==='add-nota'){
     const year = btn.dataset.year;
     if(!state.notas[year]) state.notas[year] = [];
+    if(!state.notasYears.includes(year)){ state.notasYears.push(year); state.notasYears.sort(); }
     const isCurrentYear = year === REAL_YEAR;
     state.notas[year].push({
       id: uid('n'),
@@ -1960,15 +2114,24 @@ function onAppClickInner(e){
   }
   else if(action==='confirm-import'){
     if(!ui.pendingImport) return;
+    const antes = state;
     state = ui.pendingImport.data;
     migrateState();
     ui.pendingImport = null;
     persist();
     render();
-    showToast('Backup restaurado com sucesso.');
+    showToast('Backup restaurado.', ()=>{
+      state = antes;
+      persist();
+      render();
+    });
   }
   else if(action==='cancel-import'){
     ui.pendingImport = null;
+    render();
+  }
+  else if(action==='conflito-ok'){
+    ui.conflito = null;
     render();
   }
   else if(action==='toast-undo'){
@@ -2021,7 +2184,7 @@ function onImportFile(e){
 function generatePDF(clientId, ym){
   const c = clientById(clientId);
   if(!c) return;
-  const rows = getVideos(clientId, ym);
+  const rows = videosDe(clientId, ym);
   if(rows.length===0) return;
   const [year, m] = ym.split('-');
   const mesNome = MES_NOME[m];
