@@ -858,6 +858,11 @@ function showToast(msg, undoFn){
   }, 10000);
 }
 
+/* ---------------- marca Ritmo ---------------- */
+// icone (versao creme aprovada em 2026-09-27) desenhado aqui mesmo, sem arquivo
+const RITMO_ICONE = `<svg viewBox="0 0 1024 1024" aria-hidden="true"><defs><linearGradient id="rtmbg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#FBF6EA"/><stop offset="1" stop-color="#DCD1B8"/></linearGradient><linearGradient id="rtmgl" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#fff" stop-opacity=".42"/><stop offset=".45" stop-color="#fff" stop-opacity=".06"/><stop offset="1" stop-color="#fff" stop-opacity="0"/></linearGradient><filter id="rtmsh" x="-10%" y="-10%" width="120%" height="130%"><feDropShadow dx="0" dy="14" stdDeviation="16" flood-opacity=".38"/></filter><filter id="rtmps"><feDropShadow dx="0" dy="2.2" stdDeviation="1.8" flood-color="#0b0a08" flood-opacity=".38"/></filter></defs><rect x="100" y="100" width="824" height="824" rx="185" fill="url(#rtmbg)"/><svg x="100" y="100" width="824" height="824" viewBox="0 0 100 100"><g transform="translate(6 6) scale(.88)" filter="url(#rtmps)"><defs><linearGradient id="rtmac0" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#E5B95C"/><stop offset="1" stop-color="#A87A1C"/></linearGradient><linearGradient id="rtmac1" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#A9ABE2"/><stop offset="1" stop-color="#6A6DB0"/></linearGradient><linearGradient id="rtmac2" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#B6CB93"/><stop offset="1" stop-color="#71884C"/></linearGradient><linearGradient id="rtmac3" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#E5B95C"/><stop offset="1" stop-color="#A87A1C"/></linearGradient><linearGradient id="rtmac4" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#A9ABE2"/><stop offset="1" stop-color="#6A6DB0"/></linearGradient></defs><rect x="14" y="74" width="72" height="6" rx="3" fill="#2B2620" opacity="0.22"/><rect x="17" y="62" width="11" height="12" rx="3" fill="#7A5810"/><rect x="17" y="60" width="11" height="12" rx="3" fill="url(#rtmac0)"/><rect x="18.5" y="61.5" width="3" height="6" rx="1.5" fill="#fff" opacity=".4"/><rect x="31" y="55" width="11" height="19" rx="3" fill="#4A4C81"/><rect x="31" y="53" width="11" height="19" rx="3" fill="url(#rtmac1)"/><rect x="32.5" y="54.5" width="3" height="13" rx="1.5" fill="#fff" opacity=".4"/><rect x="45" y="48" width="11" height="26" rx="3" fill="#4E6333"/><rect x="45" y="46" width="11" height="26" rx="3" fill="url(#rtmac2)"/><rect x="46.5" y="47.5" width="3" height="20" rx="1.5" fill="#fff" opacity=".4"/><rect x="59" y="40" width="11" height="34" rx="3" fill="#7A5810"/><rect x="59" y="38" width="11" height="34" rx="3" fill="url(#rtmac3)"/><rect x="60.5" y="39.5" width="3" height="28" rx="1.5" fill="#fff" opacity=".4"/><rect x="73" y="31" width="11" height="43" rx="3" fill="#4A4C81"/><rect x="73" y="29" width="11" height="43" rx="3" fill="url(#rtmac4)"/><rect x="74.5" y="30.5" width="3" height="37" rx="1.5" fill="#fff" opacity=".4"/><rect x="62.6" y="20" width="2.8" height="58" rx="1.4" fill="#211D18"/><path d="M57 14h14v6l-7 6-7-6z" fill="#211D18"/><path d="M58.5 15.5h11v3.6l-5.5 4.6-5.5-4.6z" fill="#F4574B"/></g></svg><rect x="100" y="100" width="824" height="824" rx="185" fill="url(#rtmgl)"/><rect x="104" y="104" width="816" height="816" rx="181" fill="none" stroke="#fff" stroke-opacity=".32" stroke-width="5"/></svg>`;
+const BETA = import.meta.env.MODE === 'beta';
+
 /* ---------------- rendering ---------------- */
 function esc(s){
   return (s===undefined||s===null?'':String(s))
@@ -1487,8 +1492,10 @@ function render(){
   const ae = document.activeElement;
   const metaSel = ae && ae.id==='meta-in' ? [ae.selectionStart, ae.selectionEnd] : null;
   app.innerHTML = `
+    ${BETA ? '<div class="faixa-beta">VERSÃO DE TESTE · os dados daqui são uma cópia</div>' : ''}
     <div class="topbar">
       <div class="brand">
+        <div class="ritmo-marca">${RITMO_ICONE}<span class="wm">ritmo<i>.</i></span></div>
         <h1>${esc(state.business.nomeFantasia||'Minha empresa')}</h1>
         <div class="sub sensitive">CNPJ ${esc(state.business.cnpj||'—')}</div>
       </div>
