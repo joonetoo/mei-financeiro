@@ -2,6 +2,7 @@
    Joel Neto Filmes — Controle Financeiro
    ============================================================ */
 import { createClient } from "@supabase/supabase-js";
+import { mergeState, deepEq, diffState, pareceEstado } from "./sync.js";
 
 /* ------------------------------------------------------------------ */
 /* Persistência na nuvem (Supabase) — mesmo projeto do financas-casa,  */
@@ -30,6 +31,9 @@ window.storage = {
         .maybeSingle();
       if (error) return { failed: true };
       if (!data) return { value: null };
+      // linha existe mas sem conteudo valido: trata como FALHA, nunca como
+      // "vazio" (senao o app poderia gravar os dados-semente por cima)
+      if (data.data === null || typeof data.data !== "object") return { failed: true };
       return { value: JSON.stringify(data.data), updatedAt: data.updated_at };
     } catch (e) {
       console.error("Falha ao carregar do Supabase", e);
@@ -67,7 +71,7 @@ window.storage = {
         console.error("Falha ao salvar no Supabase", error);
         throw error;
       }
-      return { ok: true };
+      return { ok: true, updatedAt: novoCarimbo };
     }
     const { data, error } = await supabase
       .from("app_data")
@@ -80,10 +84,28 @@ window.storage = {
       throw error;
     }
     if (!data || data.length === 0) return { conflict: true };
-    return { ok: true };
+    // a hora que o SERVIDOR guardou (e nao a que mandamos): e com ela que a
+    // proxima gravacao vai se comparar
+    return { ok: true, updatedAt: data[0].updated_at || novoCarimbo };
   },
   // Lança erro se a gravação falhar — quem chama precisa saber, senão o app
   // mostra "salvo" com a edição ainda só na memória do aparelho.
+  // existe alguma linha cujo id comeca com `prefixo`? (backups, copias)
+  async existeComPrefixo(prefixo) {
+    const { data, error } = await supabase
+      .from("app_data")
+      .select("id")
+      .like("id", prefixo + "%")
+      .limit(1);
+    if (error) throw error;
+    return !!(data && data.length);
+  },
+  // "Cofre": tabela app_historico, onde o app so consegue ACRESCENTAR (nunca
+  // mudar nem apagar). Guarda o que mudou em cada gravacao + uma foto por dia.
+  async historico(linhas) {
+    const { error } = await supabase.from("app_historico").insert(linhas);
+    if (error) throw error;
+  },
   async set(key, value) {
     const parsed = JSON.parse(value);
     const { error } = await supabase
@@ -95,23 +117,6 @@ window.storage = {
     }
   },
 };
-
-// Backup diário rotativo: 1x por dia (por dia da semana, até 7 "fotos"
-// recentes num id separado), sempre a partir de uma leitura que já deu
-// certo — assim, se o salvamento principal algum dia sobrescrever algo
-// errado, ainda dá pra puxar manualmente um desses backups no Supabase.
-const BACKUP_DATE_FLAG = 'jnf-last-backup-date';
-async function backupIfNeeded(goodStateJson) {
-  try {
-    const today = localISO(new Date());
-    if (localStorage.getItem(BACKUP_DATE_FLAG) === today) return;
-    const weekday = new Date().getDay();
-    await window.storage.set(`${STORAGE_KEY}-backup-${weekday}`, goodStateJson);
-    localStorage.setItem(BACKUP_DATE_FLAG, today);
-  } catch (e) {
-    console.error('Falha ao gravar backup diário', e);
-  }
-}
 
 const MESES = [
   {k:'01', nome:'Janeiro'}, {k:'02', nome:'Fevereiro'}, {k:'03', nome:'Março'},
@@ -173,17 +178,140 @@ function defaultState(){
 
 /* ---------------- storage ---------------- */
 // VITE_STORAGE_KEY so existe no servidor de teste local (aponta pra uma COPIA
-// dos dados); a versao publicada nao define essa variavel e usa a linha real.
-const STORAGE_KEY = (import.meta.env.DEV && import.meta.env.VITE_STORAGE_KEY) || 'jnf-financeiro-v1';
+// dos dados); o app BETA (build --mode beta) usa a propria copia, "mei-beta";
+// a versao publicada normal usa sempre a linha real.
+const STORAGE_KEY =
+  (import.meta.env.DEV && import.meta.env.VITE_STORAGE_KEY) ||
+  (import.meta.env.MODE === 'beta' ? 'mei-beta' : 'jnf-financeiro-v1');
 let state = null;
 let saveTimer = null;
 
-// hora da ultima gravacao da linha que ESTE aparelho conhece (a versao que
-// ele tem na memoria). Serve pra nunca gravar por cima de algo que outro
-// aparelho salvou depois (ver setIfUnchanged).
+// hora da ultima gravacao da linha que ESTE aparelho conhece, e o conteudo
+// dela ("base"). A base e o que permite juntar versoes: comparando com ela da
+// pra saber o que mudou aqui e o que mudou no outro aparelho (ver sync.js).
 let lastSyncedAt = null;
+let baseJson = null;
 // true = tem edicao feita aqui que ainda nao foi pra nuvem
 let dirty = false;
+
+// Memoria do navegador: sempre com o nome da linha junto — o app real e o
+// beta moram no mesmo endereco (joonetoo.github.io) e dividiriam essas chaves.
+const LS = {
+  backupData: `jnf-last-backup-date:${STORAGE_KEY}`,
+  fotoData: `jnf-last-foto-date:${STORAGE_KEY}`,
+  outbox: `jnf-outbox:${STORAGE_KEY}:`,       // + id da aba
+  histFila: `jnf-hist-fila:${STORAGE_KEY}`,
+};
+const TAB_ID = uid('aba');
+function lsGet(k){ try{ return localStorage.getItem(k); }catch(e){ return null; } }
+function lsSet(k, v){ try{ localStorage.setItem(k, v); return true; }catch(e){ return false; } }
+function lsDel(k){ try{ localStorage.removeItem(k); }catch(e){} }
+
+/* ---- caixa de saida: a edicao fica guardada NO APARELHO ate a nuvem confirmar ----
+   Sem isso, uma edicao feita sem sinal (celular na rua) morava so na memoria
+   do app: se o Android fechasse o app antes do sinal voltar, ela se perdia.
+   Agora cada edicao e copiada na hora pra memoria do navegador, e so sai de la
+   depois que a nuvem confirmou. Ao abrir o app, o que ficou la e reenviado
+   (juntando com o que mudou na nuvem nesse meio-tempo). */
+function outboxKey(){ return LS.outbox + TAB_ID; }
+// a "base" (versao da nuvem) fica numa chave propria e so e regravada quando
+// muda — assim cada tecla digitada copia so o estado, nao os dois
+let baseNaCaixa = null;
+function writeOutbox(){
+  if(!state) return;
+  if(baseNaCaixa !== baseJson){ lsSet(outboxKey() + ':base', baseJson || ''); baseNaCaixa = baseJson; }
+  lsSet(outboxKey(), JSON.stringify({ t: Date.now(), baseAt: lastSyncedAt, state: JSON.stringify(state) }));
+}
+function clearOutbox(){ lsDel(outboxKey()); lsDel(outboxKey() + ':base'); baseNaCaixa = null; }
+function readAllOutboxes(){
+  const out = [];
+  try{
+    for(let i=0; i<localStorage.length; i++){
+      const k = localStorage.key(i);
+      if(k && k.startsWith(LS.outbox) && !k.endsWith(':base')){
+        try{
+          const v = JSON.parse(localStorage.getItem(k));
+          if(v && v.state) out.push({k, ...v, base: localStorage.getItem(k + ':base') || null});
+        }catch(e){}
+      }
+    }
+  }catch(e){}
+  return out.sort((a,b)=>a.t-b.t);
+}
+// apaga a caixa de outra aba so se ela nao foi regravada depois que foi lida
+function apagarCaixaSeIgual(cx){
+  try{
+    const v = JSON.parse(localStorage.getItem(cx.k) || 'null');
+    if(v && v.t !== cx.t) return;
+  }catch(e){}
+  lsDel(cx.k); lsDel(cx.k + ':base');
+}
+
+/* ---- cofre (app_historico): o que mudou em cada gravacao + foto diaria ----
+   So acrescenta, nunca apaga. Se a rede falhar, guarda numa fila no aparelho
+   e manda junto na proxima vez. Nunca atrasa nem bloqueia o salvamento. */
+const APARELHO = /Android|iPhone|Mobile/i.test(navigator.userAgent) ? 'celular' : 'computador';
+let histEnviando = false;
+function filaHist(){ try{ return JSON.parse(lsGet(LS.histFila) || '[]'); }catch(e){ return []; } }
+function registrarHistorico(linha){
+  const fila = filaHist();
+  fila.push({ ...linha, chave: STORAGE_KEY, aparelho: APARELHO, quando: new Date().toISOString() });
+  // fila limitada (se ficar dias sem rede, as mais antigas cedem lugar)
+  while(fila.length > 200) fila.shift();
+  lsSet(LS.histFila, JSON.stringify(fila));
+  enviarHistorico();
+}
+async function enviarHistorico(){
+  if(histEnviando) return;
+  const fila = filaHist();
+  if(!fila.length) return;
+  // outra aba (outra janela do app) já está enviando? deixa ela
+  try{
+    const tr = JSON.parse(lsGet(LS.histFila + ':trava') || 'null');
+    if(tr && tr.aba !== TAB_ID && Date.now() - tr.t < 20000) return;
+  }catch(e){}
+  lsSet(LS.histFila + ':trava', JSON.stringify({ aba: TAB_ID, t: Date.now() }));
+  histEnviando = true;
+  try{
+    await window.storage.historico(fila);
+    const resto = filaHist().slice(fila.length); // o que entrou enquanto enviava
+    lsSet(LS.histFila, JSON.stringify(resto));
+  }catch(e){ /* fica na fila, vai na proxima */ }
+  finally{ histEnviando = false; lsDel(LS.histFila + ':trava'); }
+}
+function historicoDaGravacao(antesJson, depoisJson){
+  try{
+    const antes = antesJson ? JSON.parse(antesJson) : null;
+    const mud = diffState(antes, JSON.parse(depoisJson));
+    if(!mud.length) return;
+    const antesO = {}, depoisO = {};
+    mud.slice(0, 60).forEach(m=>{ antesO[m.path] = m.antes ?? null; depoisO[m.path] = m.depois ?? null; });
+    const resumo = mud.slice(0, 4).map(m=>m.path.replace(/^\//,'')).join(' · ') + (mud.length>4 ? ` (+${mud.length-4})` : '');
+    registrarHistorico({ acao: 'salvou', resumo, antes: antesO, depois: depoisO });
+  }catch(e){ console.error('historico', e); }
+}
+
+// Backup diario rotativo (7 linhas, uma por dia da semana) + foto diaria no
+// cofre. Roda ao abrir E tambem com o app aberto (o Mac nunca reabre), sempre
+// a partir da versao confirmada da nuvem (baseJson), nunca de algo nao salvo.
+let backupRodando = false;
+async function backupIfNeeded(){
+  if(backupRodando || !baseJson) return;
+  backupRodando = true;
+  try{
+    const today = localISO(new Date());
+    if(lsGet(LS.backupData) !== today){
+      await window.storage.set(`${STORAGE_KEY}-backup-${new Date().getDay()}`, baseJson);
+      lsSet(LS.backupData, today);
+    }
+    if(lsGet(LS.fotoData) !== today){
+      registrarHistorico({ acao: 'foto', resumo: `foto do dia ${today}`, depois: JSON.parse(baseJson) });
+      lsSet(LS.fotoData, today);
+    }
+  }catch(e){
+    console.error('Falha ao gravar backup diário', e);
+  }finally{ backupRodando = false; }
+}
 
 async function loadState(){
   // busca com algumas tentativas: uma instabilidade passageira de rede não
@@ -198,16 +326,70 @@ async function loadState(){
     throw new Error('load-failed');
   }
   if(res.value){
-    state = JSON.parse(res.value);
+    const nuvem = JSON.parse(res.value);
+    if(!pareceEstado(nuvem)) throw new Error('load-failed');
+    state = nuvem;
     lastSyncedAt = res.updatedAt || null;
+    baseJson = res.value;
     migrateState();
-    backupIfNeeded(res.value);
+    await recuperarCaixaDeSaida(nuvem);
+    backupIfNeeded();
     return;
   }
+  // Linha principal nao existe. So e "primeiro uso" de verdade se tambem nao
+  // houver nenhum backup/copia dela — se houver, algo esta errado (linha
+  // apagada, permissao): mostra erro em vez de comecar do zero.
+  let temRastro;
+  try{ temRastro = await window.storage.existeComPrefixo(STORAGE_KEY + '-'); }
+  catch(e){ throw new Error('load-failed'); }
+  if(temRastro) throw new Error('load-failed');
   state = defaultState();
   lastSyncedAt = null;
+  baseJson = null;
   await persist();
 }
+
+// Edicoes que ficaram no aparelho sem subir (app fechado sem sinal, aba que
+// travou): junta com a versao da nuvem e manda de novo. Se nao der pra guardar
+// a copia de seguranca, NAO abre o app (a caixa de saida fica intacta pra
+// proxima tentativa) — assim nada daqui some.
+let recuperadas = 0;
+async function recuperarCaixaDeSaida(nuvem){
+  const caixas = readAllOutboxes();
+  if(!caixas.length) return;
+  for(const cx of caixas){
+    let local, base;
+    try{ local = JSON.parse(cx.state); base = cx.base ? JSON.parse(cx.base) : null; }catch(e){ apagarCaixaSeIgual(cx); continue; }
+    if(!pareceEstado(local)){ apagarCaixaSeIgual(cx); continue; }
+    if(base && deepEq(local, base)) { apagarCaixaSeIgual(cx); continue; } // nao tinha nada pendente
+    if(deepEq(local, state)) { apagarCaixaSeIgual(cx); continue; }        // ja esta na nuvem
+    if(!base){
+      // sem saber de qual versao ela partiu, nao da pra juntar com seguranca:
+      // guarda a versao do aparelho a parte e fica com a da nuvem
+      await guardarCopia(cx.state, 'caixa-sem-base');
+      avisarConflito();
+      apagarCaixaSeIgual(cx);
+      continue;
+    }
+    const { merged, conflitos } = mergeState(base, local, state);
+    if(conflitos.length){
+      await guardarCopia(JSON.stringify(state), 'recuperado'); // lanca erro se falhar
+      avisarConflito();
+    }
+    state = merged;
+    migrateState();
+    recuperadas++;
+  }
+  if(recuperadas){
+    dirty = true;
+    writeOutbox();
+    // as caixas antigas so saem depois que a nuvem confirmar (ver flushSave)
+    caixasParaLimpar = caixas.filter(c=>c.k!==outboxKey());
+  }else{
+    caixas.forEach(apagarCaixaSeIgual);
+  }
+}
+let caixasParaLimpar = [];
 
 function migrateState(){
   // ensure new fields exist if state was saved by an older version
@@ -231,81 +413,151 @@ function migrateState(){
   if(!state.fechamentos || typeof state.fechamentos!=='object') state.fechamentos = {};
 }
 
-// Fila serializada de gravação: sem isso, uma gravação em voo mais lenta
-// (rede instável) pode terminar DEPOIS de uma mais nova e sobrescrever uma
-// edição recente com uma mais velha. Só existe uma gravação em andamento por
-// vez; se `state` mudar de novo enquanto ela está em voo, a próxima dispara
-// assim que a atual terminar, sempre lendo o `state` mais atual.
+// Fila serializada de gravação: só existe uma gravação em andamento por vez;
+// se `state` mudar de novo enquanto ela está em voo, a próxima dispara assim
+// que a atual terminar, sempre lendo o `state` mais atual. A trava `saving`
+// só solta no FIM de tudo (inclusive da junção com a nuvem), pra nenhuma
+// busca ou outra gravação atravessar no meio.
 let saving = false;
 let pendingRewrite = false;
 let retryTimer = null;
+// o que esta aba mandou e ainda nao teve confirmacao (resposta perdida): se a
+// nuvem estiver igual a uma delas, foi esta aba mesma que gravou
+let enviadasSemResposta = [];
 async function flushSave(){
   if(saving){ pendingRewrite = true; return; }
   clearTimeout(retryTimer);
-  if(!dirty){ setSaveIndicator('saved'); return; } // nada editado aqui: nao grava nada
+  if(!dirty){ if(saveMode!=='error') setSaveIndicator('saved'); return; }
   saving = true;
-  setSaveIndicator('saving');
-  dirty = false; // edicoes feitas durante a gravacao marcam de novo (persist)
-  const json = JSON.stringify(state);
-  const carimbo = new Date().toISOString();
-  let conflito = false;
+  let erro = false;
   try{
-    const r = await window.storage.setIfUnchanged(STORAGE_KEY, json, lastSyncedAt, carimbo);
-    if(r.conflict) conflito = true;
-    else { lastSyncedAt = carimbo; setSaveIndicator('saved'); }
+    for(let volta=0; dirty && volta<6; volta++){
+      setSaveIndicator('saving');
+      dirty = false; // edicoes feitas durante a gravacao marcam de novo (persist)
+      const json = JSON.stringify(state);
+      enviadasSemResposta.push(json);
+      if(enviadasSemResposta.length > 20) enviadasSemResposta.shift();
+      const r = await window.storage.setIfUnchanged(STORAGE_KEY, json, lastSyncedAt, new Date().toISOString());
+      if(r.conflict){
+        // outro aparelho gravou antes: junta as duas versoes e tenta de novo
+        dirty = true;
+        await juntarComNuvem();
+        continue;
+      }
+      const antes = baseJson;
+      enviadasSemResposta = [];
+      lastSyncedAt = r.updatedAt;
+      baseJson = json;
+      historicoDaGravacao(antes, json);
+    }
   }catch(e){
-    // a edição continua na memória: avisa e tenta de novo sozinho, até dar certo
+    console.error('Falha ao salvar', e);
+    erro = true;
     dirty = true;
-    setSaveIndicator('error');
-    retryTimer = setTimeout(()=>{ flushSave(); }, 5000);
+  }finally{
+    saving = false;
   }
-  saving = false;
-  if(conflito){ await resolverConflito(json); return; }
+  if(erro || dirty){
+    // a edição continua na memória E no aparelho (caixa de saída): avisa e
+    // tenta de novo sozinho, até dar certo
+    if(erro) setSaveIndicator('error');
+    retryTimer = setTimeout(()=>{ flushSave(); }, erro ? 5000 : 300);
+  }else{
+    setSaveIndicator('saved');
+    clearOutbox();
+    caixasParaLimpar.forEach(apagarCaixaSeIgual); caixasParaLimpar = [];
+  }
   if(pendingRewrite){
     pendingRewrite = false;
-    await flushSave();
+    if(dirty && !erro) await flushSave();
   }
 }
 
-// Outro aparelho salvou depois da versao que este tinha, e este tambem tinha
-// edicao. Nunca grava por cima: guarda a versao DESTE aparelho numa linha
-// separada (nada se perde), carrega a mais nova e avisa na tela.
-async function resolverConflito(jsonLocal){
+// Outro aparelho salvou depois da versão que este tinha. Nunca grava por cima
+// e não descarta nada: busca a versão da nuvem e JUNTA item a item com a daqui
+// (sync.js). Só se os dois aparelhos mudaram o MESMO campo de jeitos
+// diferentes, fica o daqui e o de lá é guardado numa linha à parte
+// (`-conflito-`) ANTES de qualquer troca. Lança erro se a rede falhar (a
+// gravação então tenta de novo, sem ter mudado nada).
+async function juntarComNuvem(){
+  const res = await window.storage.get(STORAGE_KEY);
+  if(res.failed || !res.value) throw new Error('nuvem-indisponivel');
+  const nuvem = JSON.parse(res.value);
+  if(!pareceEstado(nuvem)) throw new Error('nuvem-invalida');
+  if(!baseJson){
+    // sem base (primeiro uso, a linha foi criada por outro aparelho nesse
+    // meio-tempo): juntar "no chute" faria o estado-semente daqui ganhar da
+    // nuvem. Guarda o daqui à parte e fica com a da nuvem.
+    await guardarCopia(JSON.stringify(state), 'sem-base');
+    avisarConflito();
+    state = nuvem; migrateState();
+    lastSyncedAt = res.updatedAt || null; baseJson = res.value;
+    dirty = false; enviadasSemResposta = [];
+    ui.toast = null;
+    renderPreserveFocus();
+    return;
+  }
+  let base = JSON.parse(baseJson);
+  // uma gravação DESTA aba chegou lá, só a resposta se perdeu: a base passa a
+  // ser ela (senão pareceria que "o outro aparelho" mudou)
+  if(enviadasSemResposta.some(j => deepEq(nuvem, JSON.parse(j)))) base = nuvem;
+  enviadasSemResposta = [];
+  let { conflitos } = mergeState(base, state, nuvem);
+  if(conflitos.length){
+    await guardarCopia(res.value, 'outro-aparelho'); // lança erro se falhar: nada muda
+    avisarConflito();
+  }
+  // recalcula AGORA (sem nenhum await no meio), com o `state` mais atual —
+  // inclusive o que foi digitado enquanto a busca acontecia
+  const { merged } = mergeState(base, state, nuvem);
+  lastSyncedAt = res.updatedAt || null;
+  baseJson = res.value;
+  // so precisa gravar de novo se a junção tem algo que a nuvem ainda não tem
+  dirty = !deepEq(merged, nuvem);
+  if(deepEq(merged, state)){
+    // nada novo nos dados daqui, mas o aviso de conflito precisa aparecer
+    if(conflitos.length) renderQuandoPuder();
+    return;
+  }
+  state = merged;
+  migrateState();
+  writeOutbox();
+  // um "Desfazer" aberto apontaria pra objetos da versão antiga
+  ui.toast = null;
+  renderQuandoPuder();
+}
+
+// Redesenhar a tela no meio da digitação de um texto quebra acento (^ + a
+// vira "^a"). Se a pessoa está num campo de texto livre, espera ela sair dele.
+let renderPendente = false;
+function digitandoTextoLivre(){
+  const a = document.activeElement;
+  if(!a || !a.dataset || !a.dataset.role) return false;
+  if(a.tagName === 'TEXTAREA') return true;
+  return a.tagName === 'INPUT' && a.type === 'text' && a.dataset.field !== 'valor' && a.dataset.role !== 'limite-field';
+}
+function renderQuandoPuder(){
+  if(digitandoTextoLivre()){ renderPendente = true; return; }
+  renderPendente = false;
+  renderPreserveFocus();
+}
+
+async function guardarCopia(json, motivo){
   const d = new Date();
   const hora = `${String(d.getHours()).padStart(2,'0')}${String(d.getMinutes()).padStart(2,'0')}${String(d.getSeconds()).padStart(2,'0')}`;
   const idCopia = `${STORAGE_KEY}-conflito-${localISO(d)}-${hora}`;
-  try{
-    await window.storage.set(idCopia, jsonLocal);
-  }catch(e){
-    // sem conseguir guardar a copia, nao troca nada: segura a edicao e tenta de novo
-    dirty = true;
-    setSaveIndicator('error');
-    retryTimer = setTimeout(()=>{ flushSave(); }, 5000);
-    return;
-  }
-  const res = await window.storage.get(STORAGE_KEY);
-  if(res.failed || !res.value){
-    dirty = true;
-    setSaveIndicator('error');
-    retryTimer = setTimeout(()=>{ flushSave(); }, 5000);
-    return;
-  }
-  // edicoes feitas enquanto isso tambem estao na copia? a copia e de antes;
-  // se houve edicao nova no meio, guarda de novo junto
-  if(dirty){ try{ await window.storage.set(idCopia, JSON.stringify(state)); }catch(e){} }
-  state = JSON.parse(res.value);
-  lastSyncedAt = res.updatedAt || null;
-  migrateState();
-  dirty = false;
-  pendingRewrite = false;
-  clearTimeout(saveTimer);
-  ui.conflito = {quando: `${ddmm(localISO(d))} às ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`, id: idCopia};
-  setSaveIndicator('saved');
-  renderPreserveFocus();
+  await window.storage.set(idCopia, json);
+  registrarHistorico({ acao: 'conflito', resumo: `${motivo}: cópia guardada em ${idCopia}` });
+  return idCopia;
+}
+function avisarConflito(){
+  const d = new Date();
+  ui.conflito = {quando: `${ddmm(localISO(d))} às ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`};
 }
 
 function persist(){
   dirty = true;
+  writeOutbox();
   setSaveIndicator('saving');
   clearTimeout(saveTimer);
   return new Promise(resolve=>{
@@ -317,23 +569,30 @@ function persist(){
 }
 
 // Busca a versao mais nova da nuvem quando outro aparelho salvou algo — so se
-// este aparelho nao tiver edicao pendente (assim nunca descarta nada daqui).
+// este aparelho nao tiver edicao pendente (se tiver, a gravacao junta as duas).
 let puxando = false;
+let ultimaPuxada = 0;
 async function puxarSeMudou(){
   if(!state || dirty || saving || puxando) return;
   puxando = true;
   try{
     const s = await window.storage.getStamp(STORAGE_KEY);
     if(s.failed || !s.updatedAt) return;
+    ultimaPuxada = Date.now();
     if(lastSyncedAt && Date.parse(s.updatedAt) === Date.parse(lastSyncedAt)) return;
     const res = await window.storage.get(STORAGE_KEY);
     if(res.failed || !res.value) return;
-    if(dirty || saving) return; // editou enquanto buscava: fica com a daqui
-    state = JSON.parse(res.value);
+    if(dirty || saving) return; // editou enquanto buscava: a gravacao junta
+    const nuvem = JSON.parse(res.value);
+    if(!pareceEstado(nuvem)) return;
+    state = nuvem;
     lastSyncedAt = res.updatedAt || null;
+    baseJson = res.value;
     migrateState();
     ui.toast = null; // um "Desfazer" aberto apontaria pra versao antiga
-    renderPreserveFocus();
+    renderQuandoPuder();
+  }catch(e){
+    console.error('Falha ao buscar versão nova', e);
   }finally{
     puxando = false;
   }
@@ -341,20 +600,35 @@ async function puxarSeMudou(){
 
 // Se o app for pra segundo plano (troca de app no celular, tela apagando)
 // ou a aba fechar logo depois de uma edição, dispara a gravação pendente na
-// hora — reduz a janela em que a última edição poderia se perder por causa
-// do debounce de 300ms. SO grava se houver edicao (dirty): gravar sem editar
-// era o que fazia um aparelho com dados velhos apagar o que o outro lancou.
+// hora. SO grava se houver edicao (dirty): gravar sem editar era o que fazia
+// um aparelho com dados velhos apagar o que o outro lancou. (E mesmo que o
+// sistema mate o app no meio, a edicao esta na caixa de saida.)
 document.addEventListener('visibilitychange', () => {
   if(document.visibilityState === 'hidden' && state){
     if(dirty){ clearTimeout(saveTimer); flushSave(); }
   } else if(document.visibilityState === 'visible' && state){
     if(refreshToday()) renderPreserveFocus();
     puxarSeMudou();
+    if(dirty) flushSave();
   }
 });
 window.addEventListener('focus', () => { puxarSeMudou(); });
-// app aberto na tela durante a meia-noite (computador): vira o dia tambem
-setInterval(()=>{ if(state && document.visibilityState==='visible' && refreshToday()) renderPreserveFocus(); }, 60000);
+// voltou a internet: manda o que estiver pendente e busca a versao nova
+window.addEventListener('online', () => { if(!state) return; if(dirty) flushSave(); else puxarSeMudou(); enviarHistorico(); });
+// a cada minuto: vira o dia a meia-noite, faz o backup diario com o app
+// aberto e percebe quando o Mac acordou (relogio pulou) pra buscar na hora
+let ultimoTique = Date.now();
+setInterval(()=>{
+  const agora = Date.now();
+  const acordou = agora - ultimoTique > 120000;
+  ultimoTique = agora;
+  if(!state) return;
+  if(document.visibilityState==='visible' && refreshToday()) renderPreserveFocus();
+  if(renderPendente && !digitandoTextoLivre()) renderQuandoPuder();
+  backupIfNeeded();
+  enviarHistorico();
+  if(acordou){ puxarSeMudou(); if(dirty) flushSave(); }
+}, 60000);
 // janela do Mac que fica aberta o dia todo sem sair da tela: confere a cada 30s
 setInterval(()=>{ if(document.visibilityState==='visible') puxarSeMudou(); }, 30000);
 window.addEventListener('pagehide', () => {
@@ -362,6 +636,10 @@ window.addEventListener('pagehide', () => {
     clearTimeout(saveTimer);
     flushSave();
   }
+});
+// fechar a janela com algo ainda subindo: o navegador pergunta antes
+window.addEventListener('beforeunload', (e) => {
+  if(state && (dirty || saving)){ e.preventDefault(); e.returnValue = ''; }
 });
 
 let saveMode = 'saved';
@@ -382,6 +660,10 @@ function parseBRL(v){
   s = s.replace(/[^0-9.,-]/g,'');
   if(s.includes(',')){
     s = s.replace(/\./g,'').replace(',', '.');
+  } else if(/^-?\d{1,3}(\.\d{3})+$/.test(s)){
+    // "1.500" ou "12.000" sem virgula: o ponto e de milhar (jeito brasileiro),
+    // nao decimal — antes virava R$ 1,50
+    s = s.replace(/\./g,'');
   }
   const n = parseFloat(s);
   return isNaN(n) ? 0 : n;
@@ -536,7 +818,7 @@ let ui = {
   deleteArm: {}, // key -> timestamp, for two-step delete buttons
   toast: null,
   valuesHidden: false, // privacy toggle — device-local preference, not synced
-  conflito: null, // {quando, id} — aviso de que outro aparelho salvou por cima (ver resolverConflito)
+  conflito: null, // {quando} — aviso de que os dois aparelhos mudaram o mesmo item (ver juntarComNuvem)
   pendingImport: null // {data, fileName} — set while confirming a restore, before it overwrites everything
 };
 
@@ -559,7 +841,7 @@ function armDelete(key){
   setTimeout(()=>{
     if(ui.deleteArm[key] && Date.now()-ui.deleteArm[key] >= 3800){
       delete ui.deleteArm[key];
-      render();
+      renderPreserveFocus();
     }
   }, 4000);
 }
@@ -572,7 +854,7 @@ function showToast(msg, undoFn){
   render();
   const myId = ui.toast.id;
   setTimeout(()=>{
-    if(ui.toast && ui.toast.id===myId){ ui.toast=null; render(); }
+    if(ui.toast && ui.toast.id===myId){ ui.toast=null; renderPreserveFocus(); }
   }, 10000);
 }
 
@@ -1271,10 +1553,10 @@ function renderRail(){
         <button class="${!isEsp?'active':''}" data-action="set-new-client-tipo" data-tipo="fixo">Cliente fixo</button>
         <button class="${isEsp?'active':''}" data-action="set-new-client-tipo" data-tipo="esporadico">Esporádico</button>
       </div>
-      <input type="text" id="new-client-name" placeholder="${isEsp?'Nome da aba (ex: Clientes avulsos)':'Nome do cliente'}" autofocus>
+      <input type="text" id="new-client-name" value="${esc(ui.newClientName||'')}" placeholder="${isEsp?'Nome da aba (ex: Clientes avulsos)':'Nome do cliente'}" autofocus>
       ${isEsp ? `<div class="tipo-hint">Cada lançamento nessa aba tem seu próprio campo de cliente, descrição e valor em branco.</div>` : `
       <div class="row">
-        <input type="text" inputmode="decimal" id="new-client-valor" placeholder="Valor padrão (R$)" style="width:110px;">
+        <input type="text" inputmode="decimal" id="new-client-valor" value="${esc(ui.newClientValor||'')}" placeholder="Valor padrão (R$)" style="width:110px;">
       </div>`}
       <div class="row">
         <button data-action="confirm-add-client">Criar aba</button>
@@ -1296,8 +1578,8 @@ function renderMain(){
 
 function renderConflito(){
   return `<div class="conflito-banner" role="alert">
-    <span><b>Este aparelho estava com uma versão antiga</b> — o app foi atualizado em outro aparelho. Carreguei a versão mais nova.
-    A última alteração feita aqui (${esc(ui.conflito.quando)}) ficou guardada à parte, nada foi perdido: se faltar alguma coisa, dá pra recuperar.</span>
+    <span><b>O mesmo item foi mudado aqui e em outro aparelho</b> (${esc(ui.conflito.quando)}). Juntei tudo e, nesse item, ficou o que você fez neste aparelho.
+    A versão do outro aparelho ficou guardada à parte — nada foi perdido.</span>
     <button type="button" data-action="conflito-ok">Entendi</button>
   </div>`;
 }
@@ -1315,8 +1597,14 @@ function attachHandlers(){
   const fileInput = document.getElementById('import-file');
   if(fileInput) fileInput.onchange = onImportFile;
   if(ui.addingClient){
-    const nameInput = document.getElementById('new-client-name');
-    if(nameInput) nameInput.focus();
+    // volta pro campo em que a pessoa estava, com o cursor no fim (uma
+    // atualizacao de tela no meio da digitacao nao embaralha o texto)
+    const alvo = document.getElementById(ui.newClientFoco || 'new-client-name');
+    if(alvo && document.activeElement !== alvo){
+      alvo.focus();
+      const n = alvo.value.length;
+      try{ alvo.setSelectionRange(n, n); }catch(e){}
+    }
   }
   autoResizeTextareas();
 
@@ -1636,7 +1924,7 @@ function renderConfig(){
 function renderPreserveFocus(){
   const active = document.activeElement;
   let restore = null;
-  if(active && (active.tagName==='INPUT' || active.tagName==='TEXTAREA') && active.dataset.role){
+  if(active && (active.tagName==='INPUT' || active.tagName==='TEXTAREA' || active.tagName==='SELECT') && active.dataset.role){
     restore = {
       role: active.dataset.role, client: active.dataset.client, year: active.dataset.year,
       ym: active.dataset.ym, row: active.dataset.row, field: active.dataset.field,
@@ -1654,7 +1942,7 @@ function renderPreserveFocus(){
     const el = document.querySelector(sel);
     if(el){
       el.focus();
-      if(typeof restore.selStart==='number' && (el.tagName==='TEXTAREA' || el.type==='text')){
+      if(typeof restore.selStart==='number' && (el.tagName==='TEXTAREA' || el.type==='text' || el.type==='search')){
         try{ el.setSelectionRange(restore.selStart, restore.selEnd); }catch(e){}
       }
     }
@@ -1673,6 +1961,8 @@ function onAppInput(e){
 function onAppInputInner(e){
   const t = e.target;
   if(t.id==='meta-in'){ ui.metaDraft = t.value; return; }
+  if(t.id==='new-client-name'){ ui.newClientName = t.value; ui.newClientFoco = t.id; return; }
+  if(t.id==='new-client-valor'){ ui.newClientValor = t.value; ui.newClientFoco = t.id; return; }
   const role = t.dataset.role;
   if(!role) return;
 
@@ -1746,6 +2036,7 @@ function onAppInputInner(e){
 
 /* ---------------- normalize numbers when leaving a field ---------------- */
 function onAppFocusOut(e){
+  if(renderPendente) setTimeout(()=>{ if(renderPendente && !digitandoTextoLivre()) renderQuandoPuder(); }, 0);
   const t = e.target;
   if(!t || !t.dataset || !t.dataset.role) return;
   const role = t.dataset.role;
@@ -1884,6 +2175,7 @@ function onAppClickInner(e){
     render();
   }
   else if(action==='add-video'){
+    refreshToday();
     const client = btn.dataset.client, ym = btn.dataset.ym;
     const rows = getVideos(client, ym);
     const c = clientById(client);
@@ -1924,12 +2216,15 @@ function onAppClickInner(e){
     persist();
     render();
     showToast('Vídeo excluído.', ()=>{
-      rows.splice(idx,0,removed);
+      const atual = getVideos(client, ym);
+      if(atual.some(r=>r.id===removed.id)) return;
+      atual.splice(Math.min(idx, atual.length),0,removed);
       persist();
       render();
     });
   }
   else if(action==='add-nota'){
+    refreshToday();
     const year = btn.dataset.year;
     if(!state.notas[year]) state.notas[year] = [];
     if(!state.notasYears.includes(year)){ state.notasYears.push(year); state.notasYears.sort(); }
@@ -1952,7 +2247,10 @@ function onAppClickInner(e){
     persist();
     render();
     showToast('Nota excluída.', ()=>{
-      rows.splice(idx,0,removed);
+      if(!state.notas[year]) state.notas[year] = [];
+      const atual = state.notas[year];
+      if(atual.some(r=>r.id===removed.id)) return;
+      atual.splice(Math.min(idx, atual.length),0,removed);
       persist();
       render();
     });
@@ -1969,6 +2267,7 @@ function onAppClickInner(e){
     render();
   }
   else if(action==='fechar-confirm'){
+    refreshToday();
     const client = btn.dataset.client, ym = btn.dataset.ym;
     ui.confirmClose = null;
     const c = clientById(client);
@@ -2037,6 +2336,7 @@ function onAppClickInner(e){
   }
   else if(action==='start-add-client'){
     ui.addingClient = true;
+    ui.newClientName = ''; ui.newClientValor = ''; ui.newClientFoco = null;
     ui.addingClientTipo = 'fixo';
     render();
   }
@@ -2059,6 +2359,7 @@ function onAppClickInner(e){
     state.clients.push({id, nome:name, valorPadrao: valorEl ? parseBRL(valorEl.value) : 0, tipo, diaFechamento: 0});
     state.clientOrder.push(id);
     ui.addingClient = false;
+    ui.newClientName = ''; ui.newClientValor = ''; ui.newClientFoco = null;
     ui.addingClientTipo = 'fixo';
     ui.tab = id;
     ensureClientView(id);
@@ -2088,8 +2389,9 @@ function onAppClickInner(e){
     render();
     if(removedClient){
       showToast(`Cliente "${removedClient.nome}" excluído.`, () => {
+        if(clientById(id)) return;
         state.clients.splice(Math.min(clientIdx, state.clients.length), 0, removedClient);
-        state.clientOrder.splice(Math.min(orderIdx, state.clientOrder.length), 0, id);
+        if(!state.clientOrder.includes(id)) state.clientOrder.splice(Math.min(orderIdx, state.clientOrder.length), 0, id);
         if(removedVideos !== undefined) state.videos[id] = removedVideos;
         if(removedFech !== undefined) state.fechamentos[id] = removedFech;
         ui.tab = previousTab === id ? id : previousTab;
@@ -2304,6 +2606,10 @@ async function boot(){
   if(ui.tab && ui.tab!=='FATURAMENTO' && ui.tab!=='CONFIG') ensureClientView(ui.tab);
   render();
   attachStaticHandlers();
+  // edições que tinham ficado no aparelho sem subir: manda agora
+  if(recuperadas) showToast('Recuperei alterações que não tinham chegado na nuvem — já estou enviando.');
+  if(dirty) flushSave();
+  enviarHistorico();
   // a fonte (Fraunces/Public Sans) pode chegar depois do primeiro desenho e
   // mudar a largura dos botoes — reposiciona as pilulas quando ela carregar
   if(document.fonts && document.fonts.ready){
