@@ -1489,6 +1489,9 @@ function saveStateHtml(){
 function render(){
   const app = document.getElementById('app');
   const painel = ui.screen==='painel';
+  // secao aberta: Painel, Lancamentos (um cliente), Notas emitidas ou Configuracoes
+  const secao = painel ? 'painel' : ui.tab==='FATURAMENTO' ? 'notas' : ui.tab==='CONFIG' ? 'config' : 'lanc';
+  const navBtn = (id, icone, rotulo) => `<button type="button" class="${secao===id?'active':''}" data-action="switch-screen" data-screen="${id}" aria-pressed="${secao===id}">${icone}<span>${rotulo}</span></button>`;
   const ae = document.activeElement;
   const metaSel = ae && ae.id==='meta-in' ? [ae.selectionStart, ae.selectionEnd] : null;
   app.innerHTML = `
@@ -1501,14 +1504,15 @@ function render(){
       </div>
       <div class="screen-nav" role="group" aria-label="Tela">
         <span class="screen-nav-pill"></span>
-        <button type="button" class="${painel?'active':''}" data-action="switch-screen" data-screen="painel" aria-pressed="${painel}">${iconChart()}Painel</button>
-        <button type="button" class="${painel?'':'active'}" data-action="switch-screen" data-screen="lanc" aria-pressed="${!painel}">${iconList()}Lançamentos</button>
+        ${navBtn('painel', iconChart(), 'Painel')}
+        ${navBtn('lanc', iconList(), 'Lançamentos')}
+        ${navBtn('notas', iconDoc(15), 'Notas emitidas')}
+        ${navBtn('config', iconGear(15), 'Configurações')}
       </div>
       <div class="topbar-right">
-        <button class="privacy-toggle ${ui.valuesHidden?'active':''}" type="button" data-action="toggle-privacy" aria-pressed="${ui.valuesHidden}" aria-label="${ui.valuesHidden ? 'Mostrar valores' : 'Ocultar valores'}">
+        <button class="privacy-toggle ${ui.valuesHidden?'active':''}" type="button" data-action="toggle-privacy" aria-pressed="${ui.valuesHidden}" aria-label="${ui.valuesHidden ? 'Mostrar valores' : 'Ocultar valores'}" title="${ui.valuesHidden ? 'Mostrar valores' : 'Ocultar valores'}">
           <svg class="icon-eye" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" ${ui.valuesHidden?'hidden':''}><path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7-11-7-11-7z"/><circle cx="12" cy="12" r="3"/></svg>
           <svg class="icon-eye-off" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" ${ui.valuesHidden?'':'hidden'}><path d="M17.94 17.94A10.94 10.94 0 0 1 12 20c-7 0-11-8-11-8a21.86 21.86 0 0 1 5.06-6.06M9.9 4.24A10.94 10.94 0 0 1 12 4c7 0 11 8 11 8a21.9 21.9 0 0 1-3.22 4.44M1 1l22 22"/></svg>
-          <span>${ui.valuesHidden ? 'Mostrar valores' : 'Ocultar valores'}</span>
         </button>
       </div>
       ${saveStateHtml()}
@@ -1516,7 +1520,7 @@ function render(){
     ${ui.conflito ? renderConflito() : ''}
     ${painel ? renderPainel() : `
     <div class="layout${ui.screenAnim ? ' screen-in' : ''}">
-      ${renderRail()}
+      ${secao==='lanc' ? renderRail() : ''}
       <div class="main">${renderMain()}</div>
     </div>`}
     ${ui.toast ? renderToast() : ''}
@@ -1543,15 +1547,6 @@ function renderRail(){
     </button>`;
   });
   html += `<div class="rail-divider"></div>`;
-  html += `<div class="rail-group-label">Outros</div>`;
-  html += `<button class="tab-btn ${ui.tab==='FATURAMENTO'?'active':''}" data-action="switch-tab" data-tab="FATURAMENTO">
-    <span class="tab-chip">${iconDoc(14)}</span>
-    <span class="tab-label">Notas emitidas</span>
-  </button>`;
-  html += `<button class="tab-btn ${ui.tab==='CONFIG'?'active':''}" data-action="switch-tab" data-tab="CONFIG">
-    <span class="tab-chip">${iconGear(14)}</span>
-    <span class="tab-label">Configurações</span>
-  </button>`;
 
   if(ui.addingClient){
     const isEsp = ui.addingClientTipo==='esporadico';
@@ -2115,9 +2110,22 @@ function onAppClickInner(e){
     render();
   }
   else if(action==='switch-screen'){
-    const alvo = btn.dataset.screen==='lanc' ? 'lanc' : 'painel';
-    if(alvo===ui.screen) return;
-    ui.screen = alvo;
+    const alvo = btn.dataset.screen;
+    const clienteValido = id => id && id!=='FATURAMENTO' && id!=='CONFIG' && clientById(id);
+    if(alvo==='painel'){
+      if(ui.screen==='painel') return;
+      ui.screen = 'painel';
+    } else {
+      let tab;
+      if(alvo==='notas') tab = 'FATURAMENTO';
+      else if(alvo==='config') tab = 'CONFIG';
+      else tab = clienteValido(ui.tab) ? ui.tab : (clienteValido(ui.ultimoCliente) ? ui.ultimoCliente : (state.clientOrder.find(clienteValido) || 'FATURAMENTO'));
+      if(ui.screen==='lanc' && ui.tab===tab) return;
+      ui.screen = 'lanc';
+      ui.confirmClose = null;
+      ui.tab = tab;
+      if(clienteValido(tab)) ensureClientView(tab);
+    }
     ui.screenAnim = true;
     ui.metaEditing = false;
     render();
@@ -2154,6 +2162,7 @@ function onAppClickInner(e){
   else if(action==='switch-tab'){
     ui.confirmClose = null;
     ui.tab = btn.dataset.tab;
+    ui.ultimoCliente = ui.tab;
     if(ui.tab!=='FATURAMENTO' && ui.tab!=='CONFIG') ensureClientView(ui.tab);
     render();
   }

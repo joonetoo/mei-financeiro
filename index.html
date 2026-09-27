@@ -1097,6 +1097,11 @@ body{overflow-x:hidden;}
 .ritmo-marca .wm i{font-style:normal;color:#B98A2B;}
 .faixa-beta{margin:0 auto 12px;max-width:560px;text-align:center;font:800 11px 'Public Sans',sans-serif;letter-spacing:.08em;color:#2A1C06;background:#F0C987;border-radius:8px;padding:5px 10px;}
 
+/* olho de ocultar valores: so o icone, redondo */
+.privacy-toggle{width:42px;height:42px;padding:0;justify-content:center;border-radius:999px;}
+.privacy-toggle svg{width:18px;height:18px;}
+.screen-nav button span{white-space:nowrap;}
+
 /* bolinhas dos clientes: cor cheia, iniciais escuras (os nomes aparecem bem) */
 .tab-chip.chip-0,.tab-btn.active .tab-chip.chip-0{background:var(--chip-0);color:var(--chip-0-ink);}
 .tab-chip.chip-1,.tab-btn.active .tab-chip.chip-1{background:var(--chip-1);color:var(--chip-1-ink);}
@@ -1167,6 +1172,9 @@ body{overflow-x:hidden;}
   .tab-chip{width:36px;height:36px;border-radius:999px;font-size:11px;font-weight:800;}
   .tab-btn:not(.active) .tab-chip:not([class*="chip-"]){background:rgba(34,30,25,.08);color:var(--ink-soft);}
   .rail-add{color:var(--ink-soft);border-color:rgba(34,30,25,.25);}
+  /* fileiras que deslizam de lado: sem a barrinha de rolagem cinza */
+  .rail,.months{scrollbar-width:none;}
+  .rail::-webkit-scrollbar,.months::-webkit-scrollbar{display:none;}
 }
 
 /* ---------------- celular: One UI ---------------- */
@@ -1180,16 +1188,18 @@ body{overflow-x:hidden;}
   .ritmo-marca .wm{font-size:22px;}
   .faixa-beta{margin-top:12px;}
   .privacy-toggle{width:48px;height:48px;background:var(--surface);border:0;box-shadow:0 1px 2px rgba(34,30,25,.10);}
+  .privacy-toggle svg{width:20px;height:20px;}
   /* Painel / Lançamentos numa barra embaixo, no alcance do dedão */
   .screen-nav{
     position:fixed;left:0;right:0;bottom:0;z-index:40;width:auto;
-    display:flex;gap:0;padding:8px 28px calc(14px + env(safe-area-inset-bottom));border-radius:0;
+    display:flex;gap:0;padding:8px 6px calc(14px + env(safe-area-inset-bottom));border-radius:0;
     background:rgba(251,248,241,.94);border:0;border-top:1px solid rgba(34,30,25,.08);
     -webkit-backdrop-filter:blur(20px);backdrop-filter:blur(20px);
     box-shadow:0 -10px 24px -18px rgba(34,30,25,.35);
   }
   .screen-nav-pill{display:none;}
-  .screen-nav button{flex:1;flex-direction:column;gap:4px;padding:6px 0 2px;font-size:12px;font-weight:700;color:var(--ink-soft);border-radius:18px;min-height:56px;justify-content:center;}
+  .screen-nav button{flex:1 1 0;min-width:0;flex-direction:column;gap:4px;padding:6px 0 2px;font-size:11.5px;font-weight:700;letter-spacing:-.01em;color:var(--ink-soft);border-radius:18px;min-height:56px;justify-content:center;}
+  .screen-nav button span{max-width:100%;overflow:hidden;text-overflow:ellipsis;}
   .screen-nav button svg{width:22px;height:22px;padding:5px 18px;box-sizing:content-box;border-radius:999px;transition:background .25s var(--ease);}
   .screen-nav button.active{color:var(--ink);}
   .screen-nav button.active svg{background:var(--ink);color:var(--bg);}
