@@ -2606,18 +2606,88 @@ function generatePDF(clientId, ym){
 }
 
 /* ---------------- boot ---------------- */
+/* Esqueleto do app (sem nenhum dado) + aviso quando nao da pra carregar.
+   Aparece se a busca demorar e, se falhar, ganha o cartao "sem internet"
+   por cima. Nada aqui grava: o app so comeca a salvar depois de carregar. */
+function esqueletoHtml(){
+  const sk = (w, h, extra='') => `<span class="off-sk" style="width:${w};height:${h}px;${extra}"></span>`;
+  const cartao = t => `<div class="off-card"><span class="off-lbl">${t}</span>${sk('60%', 32)}${sk('88%', 10)}${sk('46%', 10)}</div>`;
+  const linha = w => `<div class="off-linha">${sk('12px', 12, 'border-radius:50%;flex:0 0 auto')}${sk(w, 12)}${sk('84px', 12, 'margin-left:auto;flex:0 0 auto')}</div>`;
+  const nav = (ic, t, on) => `<span class="${on?'on':''}">${ic}<span>${t}</span></span>`;
+  return `<div class="off-app" aria-hidden="true">
+    <div class="off-topo">
+      <div><div class="ritmo-marca">${RITMO_ICONE}<span class="wm">ritmo<i>.</i></span></div>${sk('min(320px,70vw)', 30, 'margin-top:6px')}</div>
+      <div class="off-nav">${nav(iconChart(), 'Painel', true)}${nav(iconList(), 'Lançamentos')}${nav(iconDoc(15), 'Notas emitidas')}${nav(iconGear(15), 'Configurações')}</div>
+    </div>
+    <div class="off-grade">${cartao('Faturado no ano')}${cartao('Limite MEI')}${cartao('Meta do mês')}</div>
+    <div class="off-card off-largo"><span class="off-lbl">A cobrar</span>${linha('38%')}${linha('30%')}${linha('44%')}</div>
+  </div>`;
+}
+function mostrarEsqueleto(){
+  document.getElementById('app').innerHTML = esqueletoHtml();
+}
+function mostrarSemConexao(){
+  const offline = navigator.onLine === false;
+  const titulo = offline ? 'Ops, sem internet no momento' : 'Não consegui buscar seus dados';
+  const texto = offline
+    ? 'O Ritmo abriu, mas precisa da internet pra trazer seus vídeos e valores. Tá tudo guardado na nuvem, nada se perdeu.'
+    : 'Pode ser a internet ou o servidor. Seus dados estão guardados na nuvem e, por segurança, nada é salvo até carregar certinho.';
+  const barras = ['#B98A2B', '#6A6DB0', '#71884C', '#B98A2B'].map((c, i) => `<i style="background:${c};animation-delay:${i*.12}s"></i>`).join('');
+  const wifi = `<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M2 8.8a15 15 0 0 1 20 0M5.5 12.5a10 10 0 0 1 13 0M9 16.2a5 5 0 0 1 6 0"/><circle cx="12" cy="19.6" r=".9" fill="currentColor"/><path d="M3 3l18 18" stroke="#C4453A"/></svg>`;
+  document.getElementById('app').innerHTML = esqueletoHtml() + `
+    <div class="off-veu"></div>
+    <div class="off-aviso" role="alertdialog" aria-labelledby="off-t" aria-describedby="off-x">
+      <span class="off-alca"></span>
+      <span class="off-icone">${RITMO_ICONE}<span class="off-selo">${wifi}</span></span>
+      <h2 id="off-t">${titulo}</h2>
+      <p id="off-x">${texto}</p>
+      <button type="button" class="off-btn" onclick="location.reload()">Tentar de novo</button>
+      <span class="off-dica"><span class="off-barras">${barras}</span>Assim que a internet voltar, eu carrego sozinho.</span>
+    </div>`;
+  // volta sozinho: quando o aparelho avisa que a rede voltou, e a cada 15s
+  // uma espiada na nuvem (so leitura). So recarrega se os dados vierem de
+  // verdade — linha ausente ou estranha continua no aviso, sem ficar em loop.
+  if(avisoArmado) return;
+  avisoArmado = true;
+  let recarregando = false;
+  const recarregar = () => { if(!recarregando && !appCarregado){ recarregando = true; location.reload(); } };
+  const espiar = async () => {
+    if(recarregando || appCarregado || navigator.onLine === false) return;
+    const r = await window.storage.get(STORAGE_KEY);
+    if(r.failed || !r.value) return;
+    try{ if(pareceEstado(JSON.parse(r.value))) recarregar(); }catch(e){}
+  };
+  window.addEventListener('online', () => setTimeout(espiar, 800));
+  setInterval(espiar, 15000);
+}
+
+// guarda o esqueleto do app no aparelho pra ele abrir sem internet
+// (so no app publicado; em teste local nao)
+function registrarEsqueletoOffline(){
+  if(!import.meta.env.PROD || !('serviceWorker' in navigator)) return;
+  navigator.serviceWorker.register('./sw.js').catch(()=>{});
+}
+
+let appCarregado = false, avisoArmado = false;
 async function boot(){
+  registrarEsqueletoOffline();
+  // o aparelho ja sabe que esta sem rede: aviso na hora (a busca na nuvem
+  // tenta varias vezes e levaria ~30s pra desistir). Nada e lido nem gravado.
+  if(navigator.onLine === false){ mostrarSemConexao(); return; }
+  // se a busca demorar, mostra o esqueleto piscando em vez da tela vazia;
+  // se passar de 10s, o aviso sobe por cima (a busca continua por tras e,
+  // se der certo, o app abre normalmente)
+  const esq = setTimeout(mostrarEsqueleto, 500);
+  const lento = setTimeout(mostrarSemConexao, 10000);
   try{
     await loadState();
   }catch(e){
-    document.getElementById('app').innerHTML =
-      '<div style="max-width:420px;margin:80px auto;padding:24px;text-align:center;font-family:sans-serif;color:#333">' +
-      'Não foi possível carregar seus dados. Verifique sua internet e recarregue a página — ' +
-      'por segurança, nada será salvo até conseguir carregar corretamente.' +
-      '<div style="margin-top:16px"><button onclick="location.reload()" style="padding:10px 22px;border-radius:999px;border:none;background:#1B263B;color:#fff;font-weight:700;cursor:pointer">Tentar de novo</button></div>' +
-      '</div>';
+    clearTimeout(esq); clearTimeout(lento);
+    mostrarSemConexao();
     return;
   }
+  clearTimeout(esq); clearTimeout(lento);
+  appCarregado = true;
   ui.tab = state.clientOrder[0] || 'FATURAMENTO';
   if(ui.tab && ui.tab!=='FATURAMENTO' && ui.tab!=='CONFIG') ensureClientView(ui.tab);
   render();
