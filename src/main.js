@@ -1802,14 +1802,14 @@ function renderClientPanel(clientId){
     </div>
     ${monthsHtml}
     ${periodoStatusHtml(clientId, ym, total)}
+    <div class="action-bar action-top">
+      <button class="btn primary" data-action="gerar-pdf" data-client="${clientId}" data-ym="${ym}" ${rows.length===0?'disabled':''}>Gerar relatório PDF</button>
+      ${fecharPeriodoHtml(clientId, ym, rows, total)}
+    </div>
     ${rowsHtml}
     <div class="table-foot">
       <button class="add-row-btn" data-action="add-video" data-client="${clientId}" data-ym="${ym}">+ ${isEsp?'adicionar lançamento':'adicionar vídeo'}</button>
       <div class="month-total">Total do período: <b class="sensitive">R$ ${fmtBRL(total)}</b></div>
-    </div>
-    <div class="action-bar">
-      <button class="btn primary" data-action="gerar-pdf" data-client="${clientId}" data-ym="${ym}" ${rows.length===0?'disabled':''}>Gerar relatório PDF</button>
-      ${fecharPeriodoHtml(clientId, ym, rows, total)}
     </div>
   `;
 }
