@@ -1579,6 +1579,141 @@ html.escuro .nt-novo span{background:#ECE6D6;color:#171B14;}
   .nt-anos .year-switch.lc-ano{flex:1 1 auto;}
   .nt-novo{height:54px;}
 }
+
+/* nomes curtos na barra de baixo do celular (5 botoes) */
+.nv-curto{display:none;}
+@media (max-width:760px){.screen-nav .nv-longo{display:none;}.screen-nav .nv-curto{display:inline;}}
+
+/* ================================================================
+   ORÇAMENTOS (2026-09-29, mockup https://claude.ai/artifact/RA5LryQDxU3TWvUWSSrNZw)
+   ================================================================ */
+.oc-grid{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:16px;align-items:start;}
+.oc-col{display:flex;flex-direction:column;gap:14px;min-width:0;}
+.oc-col .lc-card{display:flex;flex-direction:column;gap:12px;}
+.oc-col .lc-mh{margin-bottom:0;}
+.oc-col label{font-size:12px;font-weight:700;color:var(--ink-soft);display:block;margin-bottom:4px;}
+.oc-col input[type=text],.oc-col textarea{width:100%;box-sizing:border-box;font:600 14px 'Manrope',system-ui,sans-serif;color:var(--ink);background:var(--bg);border:1px solid var(--hairline-strong);border-radius:12px;padding:10px 12px;}
+.oc-col textarea{font-weight:500;line-height:1.45;resize:vertical;min-height:200px;}
+.oc-col input:focus-visible,.oc-col textarea:focus-visible,.oc-col button:focus-visible,.oc-linha:focus-visible{outline:2px solid #1F5FBF;outline-offset:2px;}
+.oc-two{display:grid;grid-template-columns:1fr 1fr;gap:10px;}
+.oc-sub{margin:-6px 0 2px 26px;}
+.oc-fraco{font-size:12px;color:var(--ink-faint);}
+.oc-intro{margin:0;color:var(--ink-soft);font-size:13.5px;}
+.oc-head{display:flex;flex-direction:column;gap:12px;}
+.oc-novo{align-self:flex-start;}
+.oc-lista{display:flex;flex-direction:column;gap:6px;}
+.oc-linha{display:grid;grid-template-columns:minmax(0,1fr) auto auto;gap:12px;align-items:center;background:var(--bg);border:0;border-radius:14px;padding:11px 14px;text-align:left;cursor:pointer;color:var(--ink);font:inherit;}
+.oc-linha:hover{background:var(--surface-wash);}
+.oc-l-txt{display:flex;flex-direction:column;min-width:0;}
+.oc-l-txt b{font-weight:800;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.oc-l-txt small{color:var(--ink-faint);font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.oc-l-v{font-weight:800;font-variant-numeric:tabular-nums;white-space:nowrap;}
+.oc-st{font-size:11px;font-weight:800;border-radius:99px;padding:3px 9px;white-space:nowrap;}
+.oc-st-rascunho{background:rgba(34,30,25,.08);color:var(--ink-soft);}
+.oc-st-enviado{background:var(--lavender-wash);color:var(--lavender-deep);}
+.oc-st-aprovado{background:var(--sage-wash);color:var(--sage-deep);}
+.oc-topo{flex-direction:row !important;align-items:center;flex-wrap:wrap;}
+.oc-voltar{border:0;background:rgba(34,30,25,.06);color:var(--ink);font:700 13px 'Manrope',sans-serif;border-radius:12px;padding:9px 12px;cursor:pointer;}
+.oc-num{display:flex;flex-direction:column;margin-right:auto;}
+.oc-num b{font-size:16px;font-weight:800;}
+.oc-num span{font-size:12px;color:var(--ink-faint);}
+.oc-seg{display:grid;grid-auto-flow:column;grid-auto-columns:1fr;gap:4px;background:var(--bg);border-radius:12px;padding:4px;}
+.oc-seg button{border:0;background:none;color:var(--ink-soft);font:700 12.5px 'Manrope',sans-serif;padding:8px 6px;border-radius:9px;cursor:pointer;line-height:1.25;}
+.oc-seg button small{display:block;font-weight:500;font-size:10.5px;opacity:.8;}
+.oc-seg button.on{background:var(--surface);color:var(--ink);box-shadow:0 1px 3px rgba(33,29,24,.18);}
+.oc-seg-st{min-width:260px;}
+/* calculadora: cartao oliva escuro nos dois temas */
+.lc-card.oc-calc{background:linear-gradient(180deg,#2E3925,#27321F) !important;color:#F4EEDD;border-color:rgba(255,255,255,.08) !important;}
+.oc-calc .lc-mh small{color:rgba(244,238,221,.7);}
+.oc-calc label{color:rgba(244,238,221,.82) !important;}
+.oc-calc input[type=text]{background:rgba(255,255,255,.1) !important;border-color:rgba(255,255,255,.2) !important;color:#F4EEDD !important;}
+.oc-calc .oc-seg{background:rgba(0,0,0,.22);}
+.oc-calc .oc-seg button{color:rgba(244,238,221,.82);}
+.oc-calc .oc-seg button.on{background:#F4EEDD;color:#211D18;}
+.oc-calc .oc-fraco{color:rgba(244,238,221,.72);}
+.oc-chips{display:flex;flex-wrap:wrap;gap:6px;}
+.oc-chips button{border:1px solid rgba(255,255,255,.25);background:none;color:#F4EEDD;border-radius:99px;padding:7px 12px;font:600 12px 'Manrope',sans-serif;cursor:pointer;}
+.oc-chips button.on{background:#E2B659;border-color:#E2B659;color:#241A05;}
+.oc-hora{display:flex;gap:8px;align-items:center;flex-wrap:wrap;font-weight:700;}
+.oc-faixas{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;}
+.oc-faixas>div{border-radius:14px;padding:10px 12px;background:rgba(255,255,255,.08);display:flex;flex-direction:column;gap:2px;min-width:0;}
+.oc-faixas small{font-size:10.5px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;opacity:.75;}
+.oc-faixas b{font-size:19px;font-weight:800;font-variant-numeric:tabular-nums;white-space:nowrap;}
+.oc-faixas span{font-size:11.5px;opacity:.8;}
+.oc-faixas .meio{background:#E2B659;color:#241A05;}
+.oc-expl{font-size:12.5px;line-height:1.5;color:rgba(244,238,221,.88);background:rgba(0,0,0,.2);border-radius:12px;padding:10px 12px;}
+.oc-expl b{color:#F3D48C;}
+.oc-expl .oc-fraco{font-size:12px;}
+.oc-ref{display:flex;gap:6px;flex-wrap:wrap;font-size:11.5px;}
+.oc-ref span{background:rgba(255,255,255,.1);border-radius:99px;padding:3px 9px;}
+.oc-usar{align-self:flex-start;border:0;background:#F4EEDD;color:#211D18;font:700 14px 'Manrope',sans-serif;border-radius:14px;padding:12px 16px;cursor:pointer;}
+/* itens e total */
+.oc-itens{display:flex;flex-direction:column;gap:10px;}
+.oc-item{display:grid;grid-template-columns:minmax(0,1fr) 64px 104px 36px;gap:8px;align-items:end;}
+.oc-x{border:0;background:rgba(34,30,25,.06);height:42px;border-radius:10px;cursor:pointer;color:var(--ink-soft);}
+.oc-i-sub{grid-column:1 / -1;text-align:right;font-size:12px;color:var(--ink-faint);margin-top:-4px;}
+.oc-add{align-self:stretch;}
+.oc-tot{display:flex;flex-direction:column;gap:8px;background:var(--gold-wash);color:var(--gold-deep);border-radius:18px;padding:14px 16px;}
+.oc-tl{display:flex;justify-content:space-between;align-items:center;gap:10px;font-size:13px;font-weight:600;}
+.oc-desc{display:flex;gap:6px;align-items:center;}
+.oc-dm{display:inline-flex;gap:2px;background:rgba(82,60,12,.12);border-radius:9px;padding:3px;}
+.oc-dm button{border:0;background:none;color:var(--gold-deep);font:800 12px 'Manrope',sans-serif;padding:5px 9px;border-radius:7px;cursor:pointer;}
+.oc-dm button.on{background:var(--gold-deep);color:var(--gold-wash);}
+.oc-tot input[type=text]{background:var(--surface) !important;}
+.oc-big b{font-size:28px;font-weight:800;letter-spacing:-.02em;font-variant-numeric:tabular-nums;}
+.oc-chk{display:flex !important;align-items:center;gap:8px;font-size:13px !important;font-weight:600 !important;color:var(--ink) !important;cursor:pointer;}
+.oc-chk input{width:18px;height:18px;accent-color:#2E3925;}
+.oc-tot .oc-chk{color:var(--gold-deep) !important;}
+.oc-link{border:0;background:none;color:var(--gold-deep);font:700 12px 'Manrope',sans-serif;text-decoration:underline;cursor:pointer;padding:0;}
+.oc-acoes{display:flex;gap:8px;flex-wrap:wrap;}
+/* previa do PDF: folha branca nos dois temas */
+.oc-prev-col{position:sticky;top:14px;display:flex;flex-direction:column;gap:8px;min-width:0;}
+.oc-prev-rot{font-size:10.5px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:var(--ink-faint);}
+.oc-folha{background:#fff;color:#211D18;aspect-ratio:210/297;width:100%;box-sizing:border-box;border-radius:6px;box-shadow:0 30px 60px -30px rgba(33,29,24,.5),0 0 0 1px rgba(33,29,24,.06);padding:6% 8%;display:flex;flex-direction:column;gap:2.4%;font-size:clamp(7px,.78vw,12px);overflow:hidden;}
+.of-top{display:flex;justify-content:space-between;align-items:flex-start;gap:4%;border-bottom:2px solid #2E3925;padding-bottom:3%;}
+.of-marca{display:flex;align-items:center;gap:.8em;min-width:0;}
+.of-marca>svg{width:3.4em;height:3.4em;margin:-.3em;flex:0 0 auto;}
+.of-nome{font-weight:800;font-size:1.45em;letter-spacing:-.02em;}
+.of-cnpj{color:#6A6356;font-size:.85em;}
+.of-tit{text-align:right;flex:0 0 auto;}
+.of-tit b{display:block;font-family:'Urbanist',sans-serif;font-weight:800;font-size:2.1em;letter-spacing:-.03em;color:#2E3925;}
+.of-tit span{color:#6A6356;font-size:.85em;}
+.of-para{display:flex;justify-content:space-between;gap:4%;background:#F6F1E5;border-radius:.6em;padding:2.4% 3%;}
+.of-para small{display:block;color:#7A7362;font-size:.75em;font-weight:800;letter-spacing:.08em;text-transform:uppercase;}
+.of-para b{font-size:1.1em;}
+.of-txt{line-height:1.42;font-size:.9em;color:#3A342A;white-space:pre-line;}
+table.of-t{width:100%;border-collapse:collapse;}
+.of-t th{text-align:left;font-size:.75em;font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:#7A7362;border-bottom:1px solid #E2DAC6;padding:.6em .4em;}
+.of-t td{padding:.7em .4em;border-bottom:1px solid #F0EADC;font-variant-numeric:tabular-nums;}
+.of-t .r{text-align:right;}
+.of-total{margin-left:auto;width:55%;display:flex;flex-direction:column;gap:.4em;}
+.of-total .l{display:flex;justify-content:space-between;color:#5A5344;}
+.of-total .big{display:flex;justify-content:space-between;align-items:baseline;background:#2E3925;color:#F4EEDD;border-radius:.6em;padding:.8em 1em;margin-top:.3em;}
+.of-total .big b{font-size:1.6em;font-weight:800;font-variant-numeric:tabular-nums;}
+.of-pag{display:flex;flex-direction:column;gap:.6em;}
+.of-pt{color:#7A7362;font-size:.8em;font-weight:800;letter-spacing:.06em;text-transform:uppercase;}
+.of-pg{display:grid;grid-template-columns:1fr 1fr;gap:3%;}
+.of-pg div{border:1px solid #E2DAC6;border-radius:.6em;padding:.8em 1em;display:flex;flex-direction:column;gap:.2em;}
+.of-pg small{color:#7A7362;font-size:.8em;font-weight:800;text-transform:uppercase;letter-spacing:.06em;}
+.of-pg b{font-size:1.15em;}
+.of-pg span{color:#6A6356;font-size:.85em;}
+.of-ps{font-size:.9em;color:#3A342A;background:#F6F1E5;border-radius:.6em;padding:.6em 1em;}
+.of-pe{margin-top:auto;display:flex;justify-content:space-between;color:#7A7362;font-size:.8em;border-top:1px solid #E2DAC6;padding-top:2%;}
+body.privacy-on .oc-folha .of-total b,body.privacy-on .oc-folha .of-pg b,body.privacy-on .oc-folha .of-t td.r,body.privacy-on .oc-folha .of-total .l span:last-child,body.privacy-on .oc-l-v{-webkit-text-security:disc;user-select:none;}
+@media (max-width:1100px){.oc-grid{grid-template-columns:1fr;}.oc-prev-col{position:static;}.oc-folha{font-size:clamp(7px,2.4vw,12px);}}
+@media (max-width:640px){
+  .oc-two{grid-template-columns:1fr;}
+  .oc-sub{margin-left:0;}
+  .oc-item{grid-template-columns:minmax(0,1fr) 56px 90px 36px;}
+  .oc-item .oc-i-d{grid-column:1 / -1;}
+  .oc-seg-st{min-width:0;width:100%;}
+  .oc-faixas b{font-size:16px;}
+  .oc-acoes .btn{flex:1 1 100%;}
+}
+html.escuro .oc-voltar,html.escuro .oc-x{background:rgba(236,230,214,.08);}
+html.escuro .oc-st-rascunho{background:rgba(236,230,214,.1);}
+html.escuro .oc-dm{background:rgba(233,201,127,.14);}
+html.escuro .oc-chk input{accent-color:#A4BD82;}
 /* ================================================================
    MODO ESCURO "A — Oliva noturno" (escolhido em 2026-09-29)
    Mockup: https://claude.ai/artifact/EdgPMts5ujWy41pEAPsPR4

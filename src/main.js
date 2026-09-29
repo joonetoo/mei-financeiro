@@ -415,6 +415,8 @@ function migrateState(){
   if(!state.metas || typeof state.metas!=='object') state.metas = {[monthKey(REAL_YEAR, REAL_MONTH)]: 6000};
   // dia em que cada periodo de cobranca foi fechado (campo novo, so acrescenta)
   if(!state.fechamentos || typeof state.fechamentos!=='object') state.fechamentos = {};
+  // orcamentos (2026-09-29): lista nova, so acrescenta
+  if(!Array.isArray(state.orcamentos)) state.orcamentos = [];
 }
 
 // Fila serializada de gravação: só existe uma gravação em andamento por vez;
@@ -812,12 +814,13 @@ let ui = {
   metaEditing: false,
   metaDraft: '', // texto sendo digitado na meta — sobrevive a um render() no meio da digitacao
   metaFocus: false,
+  orcId: null, // orcamento aberto na aba Orcamentos (null = lista) — so tela
   semanasYm: null, // mes do cartao "Semana a semana" (null = mes atual) — so tela, nao e salvo
   ordemDesc: lsGet(`ritmo-ordem:${STORAGE_KEY}`)==='desc', // true = mais recentes primeiro (so tela)
   cal: null, // calendario aberto: {tipo:'video'|'nota', client, ym, year, row, mes:'AAAA-MM'}
   fecharJanela: null, // {cid, ym, etapa:'dados'|'feito'} enquanto a janela de fechar periodo esta aberta
   confirmClose: null, // 'clientId|ym' enquanto a confirmacao de fechar periodo esta aberta
-  tab: null, // clientId | 'FATURAMENTO' | 'CONFIG'
+  tab: null, // clientId | 'FATURAMENTO' | 'CONFIG' | 'ORCAMENTOS'
   clientView: {}, // clientId -> {year, month}
   fatYear: REAL_YEAR,
   addingClient: false,
@@ -1608,6 +1611,7 @@ function renderPainel(){
   </div>`;
 }
 
+function iconOrc(size=15){return `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="2" width="16" height="20" rx="2"/><path d="M8 6h8M8 10h8M8 14h3M14 17h2"/><path d="M13.5 13.5l1.5 1.5 2.5-3"/></svg>`;}
 function iconChart(size=15){return `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v18h18"/><path d="M7 15l4-4 3 3 5-6"/></svg>`;}
 function iconList(size=15){return `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/></svg>`;}
 
@@ -1644,8 +1648,8 @@ function render(){
   const app = document.getElementById('app');
   const painel = ui.screen==='painel';
   // secao aberta: Painel, Lancamentos (um cliente), Notas emitidas ou Configuracoes
-  const secao = painel ? 'painel' : ui.tab==='FATURAMENTO' ? 'notas' : ui.tab==='CONFIG' ? 'config' : 'lanc';
-  const navBtn = (id, icone, rotulo) => `<button type="button" class="${secao===id?'active':''}" data-action="switch-screen" data-screen="${id}" aria-pressed="${secao===id}">${icone}<span>${rotulo}</span></button>`;
+  const secao = painel ? 'painel' : ui.tab==='FATURAMENTO' ? 'notas' : ui.tab==='CONFIG' ? 'config' : ui.tab==='ORCAMENTOS' ? 'orc' : 'lanc';
+  const navBtn = (id, icone, rotulo, curto) => `<button type="button" class="${secao===id?'active':''}" data-action="switch-screen" data-screen="${id}" aria-pressed="${secao===id}" aria-label="${rotulo}">${icone}${curto ? `<span class="nv-longo">${rotulo}</span><span class="nv-curto">${curto}</span>` : `<span>${rotulo}</span>`}</button>`;
   const ae = document.activeElement;
   const metaSel = ae && ae.id==='meta-in' ? [ae.selectionStart, ae.selectionEnd] : null;
   app.innerHTML = `
@@ -1656,8 +1660,9 @@ function render(){
         <span class="screen-nav-pill"></span>
         ${navBtn('painel', iconChart(), 'Painel')}
         ${navBtn('lanc', iconList(), 'Lançamentos')}
-        ${navBtn('notas', iconDoc(15), 'Notas emitidas')}
-        ${navBtn('config', iconGear(15), 'Configurações')}
+        ${navBtn('orc', iconOrc(15), 'Orçamentos')}
+        ${navBtn('notas', iconDoc(15), 'Notas emitidas', 'Notas')}
+        ${navBtn('config', iconGear(15), 'Configurações', 'Config.')}
       </div>
       <div class="topbar-right">
         <button class="privacy-toggle ${ui.valuesHidden?'active':''}" type="button" data-action="toggle-privacy" aria-pressed="${ui.valuesHidden}" aria-label="${ui.valuesHidden ? 'Mostrar valores' : 'Ocultar valores'}" title="${ui.valuesHidden ? 'Mostrar valores' : 'Ocultar valores'}">
@@ -1671,7 +1676,7 @@ function render(){
     ${painel ? renderPainel() : `
     <div class="layout${ui.screenAnim ? ' screen-in' : ''}">
       ${secao==='lanc' ? renderRail() : ''}
-      <div class="main${secao==='lanc' ? ' main-lc' : ''}">${renderMain()}</div>
+      <div class="main${secao==='lanc' || secao==='orc' ? ' main-lc' : ''}">${renderMain()}</div>
     </div>`}
     ${ui.toast ? renderToast() : ''}
     ${ui.fecharJanela ? janelaFecharHtml() : ''}
@@ -1728,6 +1733,7 @@ function renderRail(){
 function renderMain(){
   if(ui.tab==='FATURAMENTO') return renderFaturamento();
   if(ui.tab==='CONFIG') return renderConfig();
+  if(ui.tab==='ORCAMENTOS') return renderOrcamentos();
   return renderClientPanel(ui.tab);
 }
 
@@ -1779,7 +1785,7 @@ function syncAllSliders(){
   if(ui.screen!=='lanc') return;
   syncSlider('rail', '.rail-slide-pill', '.rail .tab-btn.active');
   scrollActiveTabIntoView();
-  if(ui.tab && ui.tab!=='FATURAMENTO' && ui.tab!=='CONFIG'){
+  if(ui.tab && ui.tab!=='FATURAMENTO' && ui.tab!=='CONFIG' && ui.tab!=='ORCAMENTOS'){
     syncSlider('months-'+ui.tab, '.month-slide-pill', '.months .month-pill.active');
     scrollActiveMonthIntoView();
   }
@@ -2160,6 +2166,7 @@ function onAppInput(e){
 
 function onAppInputInner(e){
   const t = e.target;
+  if(t.dataset && (t.dataset.role==='orc' || t.dataset.role==='orc-item')){ orcCampo(t); return; }
   if(t.id==='meta-in'){ ui.metaDraft = t.value; return; }
   if(t.id==='new-client-name'){ ui.newClientName = t.value; ui.newClientFoco = t.id; return; }
   if(t.id==='new-client-valor'){ ui.newClientValor = t.value; ui.newClientFoco = t.id; return; }
@@ -2310,6 +2317,7 @@ function onAppClickInner(e){
   if(!btn) return;
   const action = btn.dataset.action;
 
+  if(action.startsWith('orc-')){ orcAcao(action, btn); return; }
   if(action==='toggle-privacy'){
     ui.valuesHidden = !ui.valuesHidden;
     document.body.classList.toggle('privacy-on', ui.valuesHidden);
@@ -2318,7 +2326,7 @@ function onAppClickInner(e){
   }
   else if(action==='switch-screen'){
     const alvo = btn.dataset.screen;
-    const clienteValido = id => id && id!=='FATURAMENTO' && id!=='CONFIG' && clientById(id);
+    const clienteValido = id => id && id!=='FATURAMENTO' && id!=='CONFIG' && id!=='ORCAMENTOS' && clientById(id);
     if(alvo==='painel'){
       if(ui.screen==='painel') return;
       ui.screen = 'painel';
@@ -2326,6 +2334,7 @@ function onAppClickInner(e){
       let tab;
       if(alvo==='notas') tab = 'FATURAMENTO';
       else if(alvo==='config') tab = 'CONFIG';
+      else if(alvo==='orc') tab = 'ORCAMENTOS';
       else tab = clienteValido(ui.tab) ? ui.tab : (clienteValido(ui.ultimoCliente) ? ui.ultimoCliente : (state.clientOrder.find(clienteValido) || 'FATURAMENTO'));
       if(ui.screen==='lanc' && ui.tab===tab) return;
       ui.screen = 'lanc';
@@ -2340,8 +2349,8 @@ function onAppClickInner(e){
   }
   else if(action==='go-lancar'){
     // atalho do Painel: abre Lançamentos numa aba de cliente, no mês atual
-    if(!ui.tab || ui.tab==='FATURAMENTO' || ui.tab==='CONFIG') ui.tab = state.clientOrder[0] || 'FATURAMENTO';
-    if(ui.tab!=='FATURAMENTO' && ui.tab!=='CONFIG') ensureClientView(ui.tab);
+    if(!ui.tab || ui.tab==='FATURAMENTO' || ui.tab==='CONFIG' || ui.tab==='ORCAMENTOS') ui.tab = state.clientOrder[0] || 'FATURAMENTO';
+    if(ui.tab!=='FATURAMENTO' && ui.tab!=='CONFIG' && ui.tab!=='ORCAMENTOS') ensureClientView(ui.tab);
     ui.screen = 'lanc';
     ui.screenAnim = true;
     ui.metaEditing = false;
@@ -2370,7 +2379,7 @@ function onAppClickInner(e){
     ui.confirmClose = null;
     ui.tab = btn.dataset.tab;
     ui.ultimoCliente = ui.tab;
-    if(ui.tab!=='FATURAMENTO' && ui.tab!=='CONFIG') ensureClientView(ui.tab);
+    if(ui.tab!=='FATURAMENTO' && ui.tab!=='CONFIG' && ui.tab!=='ORCAMENTOS') ensureClientView(ui.tab);
     render();
   }
   else if(action==='switch-month'){
@@ -2778,6 +2787,480 @@ function copiarManual(v, ok){
   }catch(e){}
 }
 
+/* ================================================================
+   ORÇAMENTOS + calculadora "Quanto cobrar?" (2026-09-29)
+   Mockup aprovado: https://claude.ai/artifact/RA5LryQDxU3TWvUWSSrNZw
+   Dados: state.orcamentos (lista NOVA, so acrescenta; cada orcamento
+   e itens tem id, entao a mescla de dois aparelhos junta item a item).
+   O texto automatico NAO e gravado: so vira dado quando o Joel edita
+   (textoEditado). Campos guardam o que foi digitado; numeros so sao
+   convertidos na hora de calcular.
+   ================================================================ */
+const ORC_PISO = 40; // nunca abaixo do menor valor que ele ja cobra de um fixo
+const ORC_NIVEIS = [
+  {k:'simples',  nome:'Simples',  sub:'cortes + troca de câmera', t:'1h'},
+  {k:'medio',    nome:'Médio',    sub:'+ imagens de apoio',       t:'1h15'},
+  {k:'completo', nome:'Completo', sub:'+ lettering, trilha',      t:'1h45'},
+];
+const ORC_EXTRAS = [
+  {k:'leg',    nome:'Legendas',                     min:15, inc:'Legendas'},
+  {k:'duas',   nome:'Versão vertical e horizontal', min:10, inc:'Versão vertical e horizontal'},
+  {k:'motion', nome:'Motion',                       min:20, inc:'Motion / animação'},
+  {k:'trilha', nome:'Trilha e som',                 min:10, inc:'Trilha e ajuste de som'},
+];
+const ORC_STATUS = {rascunho:'rascunho', enviado:'enviado', aprovado:'aprovado'};
+
+// hora real hoje: media do valor por video dos clientes fixos ÷ 1h15 de trabalho
+function orcHoraReal(){
+  const fixos = state.clients.filter(c=>c.tipo!=='esporadico').map(c=>parseBRL(c.valorPadrao)).filter(v=>v>0);
+  if(!fixos.length) return 43;
+  const media = fixos.reduce((s,v)=>s+v,0)/fixos.length;
+  return Math.round(media/1.25);
+}
+function orcMediaFixos(){
+  const fixos = state.clients.filter(c=>c.tipo!=='esporadico').map(c=>parseBRL(c.valorPadrao)).filter(v=>v>0);
+  return fixos.length ? Math.round(fixos.reduce((s,v)=>s+v,0)/fixos.length) : 0;
+}
+// entende "1h30", "1:30", "1h", "45min", "90" (minutos), "1,5" (horas)
+function orcTempo(v){
+  v = String(v||'').toLowerCase().replace(/\s/g,''); if(!v) return 0; let m;
+  if((m = v.match(/^(\d+)[h:](\d{1,2})?(min|m)?$/))) return +m[1] + (m[2] ? +m[2]/60 : 0);
+  if((m = v.match(/^(\d+)(min|m)$/))) return +m[1]/60;
+  const n = parseFloat(v.replace(',','.')); if(isNaN(n)) return 0;
+  return n > 10 ? n/60 : n;
+}
+function orcFmtT(h){
+  let hh = Math.floor(h+1e-9), mm = Math.round((h-hh)*60);
+  if(mm===60){ hh++; mm=0; }
+  return (hh ? hh+'h' : '') + (mm ? (hh ? String(mm).padStart(2,'0') : mm+'min') : '') || '0min';
+}
+function orcProximoNumero(){
+  const ano = TODAY_ISO.slice(0,4);
+  let max = 0;
+  (state.orcamentos||[]).forEach(o=>{
+    const m = String(o.numero||'').match(/^ORC-(\d{4})-(\d+)$/);
+    if(m && m[1]===ano) max = Math.max(max, +m[2]);
+  });
+  return `ORC-${ano}-${String(max+1).padStart(3,'0')}`;
+}
+function orcNovo(){
+  return {
+    id: uid('o'), numero: orcProximoNumero(), data: TODAY_ISO, status: 'rascunho',
+    cliente: '', projeto: '',
+    itens: [{id: uid('i'), descricao: 'Edição de vídeo', qtd: '1', valor: ''}],
+    descTipo: 'pc', descValor: '0', usarTotalManual: false, totalManual: '',
+    texto: '', textoEditado: false, prazo: '7 dias úteis', validade: '15 dias',
+    pag: {pix: true, pixDesc: '0', cartao: true, parc: '3', sinal: false},
+    calc: {modo:'freela', qtd:'1', duracao:'', nivel:'simples', tempo:'1h', extras:['leg'], hora:String(orcHoraReal()), adic:30, prazo:'1'},
+  };
+}
+function orcAtual(){ return (state.orcamentos||[]).find(o=>o.id===ui.orcId) || null; }
+
+function orcCalcular(o){
+  const c = o.calc || {};
+  const freela = c.modo !== 'fixo';
+  const q = Math.max(1, parseInt(c.qtd,10) || 1);
+  const t = orcTempo(c.tempo) || 1;
+  const H = parseBRL(c.hora) || orcHoraReal();
+  const extMin = ORC_EXTRAS.filter(x=>(c.extras||[]).includes(x.k)).reduce((s,x)=>s+x.min, 0);
+  const tt = t + extMin/60;
+  const adic = freela ? (Number(c.adic)||0)/100 : 0;
+  const pz = Number(c.prazo) || 1;
+  const volMax = freela ? 0.08 : 0.12;
+  const vol = q>=20 ? volMax : q>=10 ? volMax/2 : 0;
+  const hora = H*(1+adic);
+  const r5 = v => Math.round(v/5)*5;
+  const cheio = Math.max(ORC_PISO, r5(hora*tt*pz));
+  const justo = Math.max(ORC_PISO, r5(hora*tt*pz*(1-vol)));
+  const min = Math.max(ORC_PISO, r5(H*tt*(1-vol)));
+  const folga = r5(justo*1.15);
+  return {freela, q, t, H, extMin, tt, adic, pz, vol, hora, cheio, justo, min, folga};
+}
+function orcTotais(o){
+  const soma = (o.itens||[]).reduce((s,it)=> s + (parseInt(it.qtd,10)||0) * parseBRL(it.valor), 0);
+  const dv = parseBRL(o.descValor);
+  const desc = o.descTipo==='pc' ? soma*dv/100 : dv;
+  const manual = o.usarTotalManual && String(o.totalManual||'').trim() !== '';
+  const total = manual ? parseBRL(o.totalManual) : Math.max(0, soma - desc);
+  const pixPc = parseBRL(o.pag && o.pag.pixDesc);
+  return {soma, dv, desc: manual ? 0 : desc, total, manual, pix: total*(1-pixPc/100), pixPc};
+}
+function orcTextoPadrao(o){
+  const q = (o.itens||[]).reduce((s,it)=>s+(parseInt(it.qtd,10)||0),0) || 1;
+  const inc = ['Edição e cortes']
+    .concat(ORC_EXTRAS.filter(x=>((o.calc&&o.calc.extras)||[]).includes(x.k)).map(x=>x.inc))
+    .concat(['1 rodada de ajustes pequenos (correções de texto, troca de trecho)']);
+  const proj = (o.projeto||'').trim();
+  return `Olá, tudo bem? Obrigado pelo contato!\n\nSegue o orçamento para a edição de ${q} vídeo${q>1?'s':''}${proj ? ` do projeto ${proj}` : ''}.\n\nO que está incluso:\n${inc.map(x=>'• '+x).join('\n')}\n\nPrazo de entrega: ${o.prazo||'a combinar'}. Posso entregar em lotes, pra você ir aprovando enquanto sigo com os próximos.\n\nAjustes além da rodada inclusa, ou mudanças depois de aprovado, são orçados à parte.\n\nEste orçamento vale por ${o.validade||'15 dias'}. Qualquer dúvida, fico à disposição!`;
+}
+function orcTexto(o){ return o.textoEditado ? (o.texto||'') : orcTextoPadrao(o); }
+
+/* ---------- tela ---------- */
+function renderOrcamentos(){
+  if(!Array.isArray(state.orcamentos)) state.orcamentos = [];
+  const o = orcAtual();
+  return o ? orcEditorHtml(o) : orcListaHtml();
+}
+function orcStatusChip(s){ return `<span class="oc-st oc-st-${s}">${ORC_STATUS[s]||s}</span>`; }
+function orcListaHtml(){
+  const lista = state.orcamentos.slice().sort((a,b)=> (b.data||'').localeCompare(a.data||'') || String(b.numero).localeCompare(String(a.numero)));
+  const linhas = lista.map(o=>{
+    const t = orcTotais(o);
+    return `<button type="button" class="oc-linha" data-action="orc-abrir" data-id="${o.id}">
+      <span class="oc-l-txt"><b>${esc(o.cliente||'Sem nome')}</b><small>${esc(o.projeto||'—')} · ${esc(o.numero)} · ${ddmm(o.data)}</small></span>
+      <span class="oc-l-v sensitive">R$ ${fmtBRL(t.total)}</span>${orcStatusChip(o.status)}
+    </button>`;
+  }).join('');
+  return `<div class="lc-card oc-head">
+      <div class="lc-mh"><small>Orçamentos</small><span>${lista.length ? plural(lista.length,'orçamento','orçamentos') : ''}</span></div>
+      <p class="oc-intro">Monte o preço na calculadora, preencha o orçamento e baixe o PDF pra mandar pro cliente.</p>
+      <button type="button" class="btn primary oc-novo" data-action="orc-novo">+ Novo orçamento</button>
+    </div>
+    <div class="lc-card">
+      <div class="lc-mh"><small>Feitos</small></div>
+      ${linhas ? `<div class="oc-lista">${linhas}</div>` : `<div class="empty-hint">Nenhum orçamento ainda. Toque em “+ Novo orçamento” pra começar.</div>`}
+    </div>`;
+}
+function orcSeg(grupo, opcoes, atual){
+  return `<div class="oc-seg" role="group">${opcoes.map(([v,rot,sub])=>`<button type="button" class="${String(atual)===String(v)?'on':''}" data-action="orc-calc-set" data-f="${grupo}" data-v="${v}" aria-pressed="${String(atual)===String(v)}">${rot}${sub?`<small>${sub}</small>`:''}</button>`).join('')}</div>`;
+}
+function orcCalcOut(o){
+  const r = orcCalcular(o);
+  return {
+    f1: `R$ ${fmtBRL(r.min)}`, f2: `R$ ${fmtBRL(r.justo)}`, f3: `R$ ${fmtBRL(r.folga)}`,
+    expl: `Sua hora real: <b>R$ ${fmtBRL(r.H)}</b>${r.freela ? ` + ${Math.round(r.adic*100)}% de hora extra = <b>R$ ${fmtBRL(r.hora)}/h</b>` : ''}. Cada vídeo leva <b>${orcFmtT(r.tt)}</b>${r.extMin ? ' (com os extras)' : ''}${r.pz>1 ? ', prazo apertado' : ''}${r.vol ? `, desconto de <b>${Math.round(r.vol*100)}%</b> por serem ${r.q} vídeos (já está nesses preços; no orçamento ele aparece separado)` : ''}.<br>Pacote no preço justo: <b>R$ ${fmtBRL(r.justo*r.q)}</b> · <b>${orcFmtT(r.tt*r.q)}</b> de trabalho${r.freela ? ` (fora do seu horário: uns ${Math.ceil(r.tt*r.q/3)} dias de 3h extras)` : ''}.<br><span class="oc-fraco">O mínimo é a sua hora real, sem adicional. Nenhuma faixa fica abaixo de R$ ${fmtBRL(ORC_PISO)} por vídeo.</span>`
+  };
+}
+function orcEditorHtml(o){
+  const c = o.calc;
+  const out = orcCalcOut(o);
+  const t = orcTotais(o);
+  const refs = state.clientOrder.map(id=>clientById(id)).filter(cl=>cl && cl.tipo!=='esporadico' && parseBRL(cl.valorPadrao)>0)
+    .map(cl=>`<span>${esc(cl.nome.split(' ')[0].charAt(0)+cl.nome.split(' ')[0].slice(1).toLowerCase())} R$ ${fmtCurto(parseBRL(cl.valorPadrao))}</span>`).join('');
+  const inp = (f, val, extra='') => `<input type="text" data-role="orc" data-field="${f}" value="${esc(val??'')}" ${extra}>`;
+  const itens = (o.itens||[]).map(it=>`<div class="oc-item">
+      <div class="oc-i-d"><label>Descrição</label><input type="text" data-role="orc-item" data-row="${it.id}" data-field="descricao" value="${esc(it.descricao||'')}"></div>
+      <div class="oc-i-q"><label>Qtd</label><input type="text" inputmode="numeric" data-role="orc-item" data-row="${it.id}" data-field="qtd" value="${esc(it.qtd??'')}"></div>
+      <div class="oc-i-v"><label>Valor un.</label><input class="sensitive" type="text" inputmode="decimal" data-role="orc-item" data-row="${it.id}" data-field="valor" value="${esc(it.valor??'')}" placeholder="0,00"></div>
+      <button type="button" class="oc-x" data-action="orc-item-del" data-row="${it.id}" aria-label="Tirar item">✕</button>
+      <div class="oc-i-sub sensitive" data-sub="${it.id}">R$ ${fmtBRL((parseInt(it.qtd,10)||0)*parseBRL(it.valor))}</div>
+    </div>`).join('');
+  const armed = isArmed('orc-'+o.id);
+  return `<div class="oc-grid">
+   <div class="oc-col">
+    <div class="lc-card oc-topo">
+      <button type="button" class="oc-voltar" data-action="orc-voltar">‹ Orçamentos</button>
+      <div class="oc-num"><b>${esc(o.numero)}</b><span>${ddmm(o.data)}</span></div>
+      ${orcSegStatus(o.status)}
+    </div>
+
+    <div class="lc-card oc-calc">
+      <div class="lc-mh"><small>Quanto cobrar? · calculadora</small></div>
+      <div><label>Que tipo de trabalho é?</label>${orcSeg('modo', [['freela','Freela pontual'],['fixo','Cliente fixo novo']], c.modo)}</div>
+      <div class="oc-two"><div><label>Quantos vídeos</label>${inp('calc.qtd', c.qtd, 'inputmode="numeric"')}</div><div><label>Duração final de cada um</label>${inp('calc.duracao', c.duracao, 'placeholder="ex.: 4 min"')}</div></div>
+      <div><label>Nível do vídeo (já sugere o tempo)</label>${orcSeg('nivel', ORC_NIVEIS.map(n=>[n.k,n.nome,n.sub]), c.nivel)}</div>
+      <div><label>Tempo de edição por vídeo</label>${inp('calc.tempo', c.tempo, 'placeholder="ex.: 1h, 1h30, 45min" style="max-width:170px"')}</div>
+      <div><label>Extras (somam tempo)</label><div class="oc-chips">${ORC_EXTRAS.map(x=>`<button type="button" class="${(c.extras||[]).includes(x.k)?'on':''}" data-action="orc-extra" data-k="${x.k}" aria-pressed="${(c.extras||[]).includes(x.k)}">${x.nome} +${x.min}min</button>`).join('')}</div></div>
+      <div><label>Sua hora real hoje</label><div class="oc-hora"><span>R$</span>${inp('calc.hora', c.hora, 'inputmode="decimal" class="sensitive" style="max-width:96px"')}<span class="oc-fraco">média dos fixos: R$ ${fmtCurto(orcMediaFixos())} por vídeo ÷ 1h15</span></div></div>
+      ${c.modo!=='fixo' ? `<div><label>Adicional de hora extra (sai do seu descanso)</label>${orcSeg('adic', [[20,'+20%'],[30,'+30%'],[50,'+50%']], c.adic)}</div>` : ''}
+      <div><label>Prazo</label>${orcSeg('prazo', [['1','Espalhado'],['1.15','Apertado'],['1.3','Urgente']], c.prazo)}</div>
+      <div class="oc-faixas"><div><small>Mínimo</small><b class="sensitive" id="oc-f1">${out.f1}</b><span>por vídeo</span></div><div class="meio"><small>Justo</small><b class="sensitive" id="oc-f2">${out.f2}</b><span>por vídeo</span></div><div><small>Com folga</small><b class="sensitive" id="oc-f3">${out.f3}</b><span>por vídeo</span></div></div>
+      <div class="oc-expl sensitive" id="oc-expl">${out.expl}</div>
+      ${refs ? `<div class="oc-ref"><span>Você cobra hoje:</span>${refs}</div>` : ''}
+      <button type="button" class="oc-usar" data-action="orc-usar">Usar o preço justo no orçamento ↓</button>
+    </div>
+
+    <div class="lc-card">
+      <div class="lc-mh"><small>Para quem</small></div>
+      <div class="oc-two"><div><label>Cliente</label>${inp('cliente', o.cliente, 'placeholder="Nome da pessoa ou empresa"')}</div><div><label>Projeto</label>${inp('projeto', o.projeto, 'placeholder="ex.: Treinamento em vídeo"')}</div></div>
+    </div>
+
+    <div class="lc-card">
+      <div class="lc-mh"><small>O que vai ser feito</small></div>
+      <div class="oc-itens">${itens}</div>
+      <button type="button" class="add-row-btn oc-add" data-action="orc-item-add">+ adicionar item</button>
+      <div class="oc-tot">
+        <div class="oc-tl"><span>Soma dos itens</span><b class="sensitive" id="oc-soma">R$ ${fmtBRL(t.soma)}</b></div>
+        <div class="oc-tl"><span>Desconto</span><span class="oc-desc"><span class="oc-dm">${['pc','rs'].map(v=>`<button type="button" class="${o.descTipo===v?'on':''}" data-action="orc-desc-tipo" data-v="${v}">${v==='pc'?'%':'R$'}</button>`).join('')}</span>${inp('descValor', o.descValor, 'inputmode="decimal" class="sensitive" style="width:84px"')}</span></div>
+        <label class="oc-chk"><input type="checkbox" data-role="orc" data-field="usarTotalManual" ${o.usarTotalManual?'checked':''}> Quero digitar o valor final eu mesmo</label>
+        ${o.usarTotalManual ? inp('totalManual', o.totalManual, 'inputmode="decimal" class="sensitive" placeholder="Valor final"') : ''}
+        <div class="oc-tl oc-big"><span>Total</span><b class="sensitive" id="oc-tot">R$ ${fmtBRL(t.total)}</b></div>
+      </div>
+    </div>
+
+    <div class="lc-card">
+      <div class="lc-mh"><small>Texto e condições</small>${o.textoEditado ? `<button type="button" class="oc-link" data-action="orc-texto-auto">voltar pro texto automático</button>` : ''}</div>
+      <div><label>Mensagem ${o.textoEditado ? '(editada por você)' : '(se monta sozinha; dá pra editar)'}</label><textarea data-role="orc" data-field="texto" rows="12">${esc(orcTexto(o))}</textarea></div>
+      <div class="oc-two"><div><label>Prazo de entrega</label>${inp('prazo', o.prazo)}</div><div><label>Validade</label>${inp('validade', o.validade)}</div></div>
+    </div>
+
+    <div class="lc-card">
+      <div class="lc-mh"><small>Forma de pagamento</small></div>
+      <label class="oc-chk"><input type="checkbox" data-role="orc" data-field="pag.pix" ${o.pag.pix?'checked':''}> Pix à vista</label>
+      <div class="oc-two oc-sub"><div><label>Desconto extra no Pix (%)</label>${inp('pag.pixDesc', o.pag.pixDesc, 'inputmode="decimal" placeholder="0"')}</div><div></div></div>
+      <label class="oc-chk"><input type="checkbox" data-role="orc" data-field="pag.cartao" ${o.pag.cartao?'checked':''}> Cartão de crédito parcelado</label>
+      <div class="oc-two oc-sub"><div><label>Em até quantas vezes</label>${inp('pag.parc', o.pag.parc, 'inputmode="numeric"')}</div><div class="oc-fraco" style="align-self:end">com acréscimo da taxa da maquininha</div></div>
+      <label class="oc-chk"><input type="checkbox" data-role="orc" data-field="pag.sinal" ${o.pag.sinal?'checked':''}> 50% pra começar e 50% na entrega</label>
+    </div>
+
+    <div class="oc-acoes">
+      <button type="button" class="btn primary" data-action="orc-pdf">Baixar PDF</button>
+      ${o.status!=='aprovado' ? `<button type="button" class="btn gold" data-action="orc-aprovar">Aprovado: criar aba do cliente</button>` : ''}
+      <button type="button" class="btn ${armed?'danger-step confirming':'danger-step'}" data-action="orc-excluir">${armed?'Toque de novo pra excluir':'Excluir'}</button>
+    </div>
+   </div>
+   <div class="oc-prev-col"><div class="oc-prev-rot">Prévia do PDF</div><div class="oc-folha" id="oc-folha">${orcFolhaHtml(o)}</div></div>
+  </div>`;
+}
+function orcSegStatus(s){
+  return `<div class="oc-seg oc-seg-st" role="group" aria-label="Situação">${Object.keys(ORC_STATUS).map(k=>`<button type="button" class="${s===k?'on':''}" data-action="orc-status" data-v="${k}" aria-pressed="${s===k}">${ORC_STATUS[k].charAt(0).toUpperCase()+ORC_STATUS[k].slice(1)}</button>`).join('')}</div>`;
+}
+function orcFolhaHtml(o){
+  const b = state.business || {};
+  const t = orcTotais(o);
+  const linhas = (o.itens||[]).map(it=>`<tr><td>${esc(it.descricao||'')}</td><td class="r">${esc(it.qtd||'')}</td><td class="r">R$ ${fmtBRL(parseBRL(it.valor))}</td><td class="r">R$ ${fmtBRL((parseInt(it.qtd,10)||0)*parseBRL(it.valor))}</td></tr>`).join('');
+  const pag = [];
+  if(o.pag.pix) pag.push(`<div><small>Pix à vista</small><b>R$ ${fmtBRL(t.pix)}</b>${t.pixPc>0?`<span>com ${String(o.pag.pixDesc).replace('.',',')}% de desconto extra</span>`:''}</div>`);
+  if(o.pag.cartao) pag.push(`<div><small>Cartão de crédito</small><b>em até ${Math.max(1,parseInt(o.pag.parc,10)||1)}x</b><span>com acréscimo da taxa da maquininha</span></div>`);
+  const contato = [b.cnpj?`CNPJ ${b.cnpj}`:'', b.email||'', b.telefone||''].filter(Boolean).map(esc).join(' · ');
+  return `<div class="of-top"><div class="of-marca">${RITMO_ICONE}<div><div class="of-nome">${esc(b.nomeFantasia||'')}</div><div class="of-cnpj">${contato}</div></div></div><div class="of-tit"><b>Orçamento</b><span>${esc(o.numero)} · ${fmtDateBR(o.data)}</span></div></div>
+   <div class="of-para"><div><small>Para</small><b>${esc(o.cliente||'—')}</b></div><div style="text-align:right"><small>Projeto</small><b>${esc(o.projeto||'—')}</b></div></div>
+   <div class="of-txt">${esc(orcTexto(o))}</div>
+   <table class="of-t"><thead><tr><th>Descrição</th><th class="r">Qtd</th><th class="r">Valor un.</th><th class="r">Subtotal</th></tr></thead><tbody>${linhas}</tbody></table>
+   <div class="of-total"><div class="l"><span>Soma</span><span>R$ ${fmtBRL(t.soma)}</span></div>${t.desc>0?`<div class="l"><span>Desconto${o.descTipo==='pc'?` (${String(o.descValor).replace('.',',')}%)`:''}</span><span>− R$ ${fmtBRL(t.desc)}</span></div>`:''}<div class="big"><span>Total</span><b>R$ ${fmtBRL(t.total)}</b></div></div>
+   ${pag.length ? `<div class="of-pag"><small class="of-pt">Forma de pagamento</small><div class="of-pg">${pag.join('')}</div>${o.pag.sinal?'<div class="of-ps">50% na aprovação para iniciar e 50% na entrega.</div>':''}</div>` : ''}
+   <div class="of-pe"><span>ritmo. · sua produção, no ritmo certo</span><span>${esc(b.nomeFantasia||'')}</span></div>`;
+}
+// depois de digitar: atualiza so os numeros, a previa e o texto automatico (sem redesenhar a tela)
+function orcAtualizarAoVivo(){
+  const o = orcAtual(); if(!o) return;
+  const out = orcCalcOut(o);
+  const set = (id, h) => { const el = document.getElementById(id); if(el) el.innerHTML = h; };
+  set('oc-f1', out.f1); set('oc-f2', out.f2); set('oc-f3', out.f3); set('oc-expl', out.expl);
+  const t = orcTotais(o);
+  set('oc-soma', `R$ ${fmtBRL(t.soma)}`); set('oc-tot', `R$ ${fmtBRL(t.total)}`);
+  (o.itens||[]).forEach(it=>{ const el = document.querySelector(`[data-sub="${it.id}"]`); if(el) el.textContent = `R$ ${fmtBRL((parseInt(it.qtd,10)||0)*parseBRL(it.valor))}`; });
+  const ta = document.querySelector('textarea[data-role="orc"][data-field="texto"]');
+  if(ta && !o.textoEditado && document.activeElement!==ta) ta.value = orcTextoPadrao(o);
+  set('oc-folha', orcFolhaHtml(o));
+}
+// grava o que foi digitado num campo do orcamento
+function orcCampo(t){
+  const o = orcAtual(); if(!o) return false;
+  const f = t.dataset.field;
+  const v = t.type==='checkbox' ? t.checked : t.value;
+  if(t.dataset.role==='orc-item'){
+    const it = (o.itens||[]).find(x=>x.id===t.dataset.row); if(!it) return false;
+    it[f] = v;
+  } else if(f==='texto'){
+    o.texto = v; o.textoEditado = true;
+  } else if(f.startsWith('calc.')){
+    o.calc[f.slice(5)] = v;
+  } else if(f.startsWith('pag.')){
+    o.pag[f.slice(4)] = v;
+  } else {
+    o[f] = v;
+  }
+  persist();
+  if(t.type==='checkbox' && f==='usarTotalManual'){ renderPreserveFocus(); return true; }
+  orcAtualizarAoVivo();
+  return true;
+}
+function orcAcao(action, btn){
+  if(action==='orc-novo'){
+    if(!Array.isArray(state.orcamentos)) state.orcamentos = [];
+    const o = orcNovo();
+    state.orcamentos.push(o);
+    ui.orcId = o.id;
+    persist(); render(); window.scrollTo({top:0});
+    return true;
+  }
+  if(action==='orc-abrir'){ ui.orcId = btn.dataset.id; render(); window.scrollTo({top:0}); return true; }
+  if(action==='orc-voltar'){ ui.orcId = null; render(); window.scrollTo({top:0}); return true; }
+  const o = orcAtual(); if(!o) return action.startsWith('orc-');
+  if(action==='orc-status'){ o.status = btn.dataset.v; persist(); render(); return true; }
+  if(action==='orc-calc-set'){
+    const f = btn.dataset.f, v = btn.dataset.v;
+    o.calc[f] = f==='adic' ? Number(v) : v;
+    if(f==='nivel'){ const n = ORC_NIVEIS.find(x=>x.k===v); if(n) o.calc.tempo = n.t; }
+    persist(); render(); return true;
+  }
+  if(action==='orc-extra'){
+    const k = btn.dataset.k; const ex = o.calc.extras || (o.calc.extras = []);
+    const i = ex.indexOf(k); if(i>=0) ex.splice(i,1); else ex.push(k);
+    persist(); render(); return true;
+  }
+  if(action==='orc-usar'){
+    const r = orcCalcular(o);
+    const nivel = (ORC_NIVEIS.find(n=>n.k===o.calc.nivel)||ORC_NIVEIS[0]).nome.toLowerCase();
+    const dur = String(o.calc.duracao||'').trim();
+    o.itens = [{id: uid('i'), descricao: `Edição de vídeo (${dur ? dur+', ' : ''}${nivel})`, qtd: String(r.q), valor: fmtBRL(r.cheio)}];
+    o.descTipo = 'pc'; o.descValor = r.vol ? String(Math.round(r.vol*100)) : '0';
+    o.usarTotalManual = false;
+    persist(); render();
+    showToast(`Preço justo aplicado: ${r.q} × R$ ${fmtBRL(r.cheio)}${r.vol ? ` com ${Math.round(r.vol*100)}% de desconto` : ''}.`);
+    return true;
+  }
+  if(action==='orc-item-add'){
+    o.itens.push({id: uid('i'), descricao: '', qtd: '1', valor: ''});
+    persist(); render(); return true;
+  }
+  if(action==='orc-item-del'){
+    const idx = o.itens.findIndex(x=>x.id===btn.dataset.row); if(idx<0) return true;
+    const [tirado] = o.itens.splice(idx,1);
+    persist(); render();
+    showToast('Item tirado do orçamento.', ()=>{ if(!o.itens.some(x=>x.id===tirado.id)) o.itens.splice(Math.min(idx,o.itens.length),0,tirado); persist(); render(); });
+    return true;
+  }
+  if(action==='orc-desc-tipo'){ o.descTipo = btn.dataset.v; persist(); render(); return true; }
+  if(action==='orc-texto-auto'){ o.textoEditado = false; o.texto = ''; persist(); render(); return true; }
+  if(action==='orc-pdf'){ orcGerarPDF(o); if(o.status==='rascunho'){ o.status='enviado'; persist(); render(); } return true; }
+  if(action==='orc-aprovar'){
+    const nome = (o.cliente||'').trim();
+    if(!nome){ showToast('Escreva o nome do cliente antes de aprovar.'); return true; }
+    const antesStatus = o.status;
+    const existente = state.clients.find(c=>c.nome.trim().toLowerCase()===nome.toLowerCase());
+    let criado = null;
+    const t = orcTotais(o);
+    const qtdTotal = o.itens.reduce((s,it)=>s+(parseInt(it.qtd,10)||0),0) || 1;
+    const porVideo = Math.round(t.total/qtdTotal*100)/100;
+    if(!existente){
+      criado = {id: uid('c'), nome: nome.toUpperCase(), valorPadrao: porVideo, tipo: 'fixo', diaFechamento: 0, cnpj: ''};
+      state.clients.push(criado); state.clientOrder.push(criado.id);
+    }
+    o.status = 'aprovado';
+    o.clienteId = existente ? existente.id : criado.id;
+    persist();
+    ui.screen = 'lanc'; ui.tab = o.clienteId; ensureClientView(o.clienteId); ui.screenAnim = true;
+    render(); window.scrollTo({top:0});
+    showToast(existente ? `Aprovado! Aberta a aba de ${existente.nome}.` : `Aprovado! Criei a aba ${criado.nome} com R$ ${fmtBRL(porVideo)} por vídeo.`, ()=>{
+      o.status = antesStatus; delete o.clienteId;
+      if(criado){
+        const vids = state.videos[criado.id];
+        const temVideo = vids && Object.values(vids).some(r=>r && r.length);
+        if(!temVideo){
+          const i = state.clients.findIndex(c=>c.id===criado.id); if(i>=0) state.clients.splice(i,1);
+          const j = state.clientOrder.indexOf(criado.id); if(j>=0) state.clientOrder.splice(j,1);
+          if(vids) delete state.videos[criado.id];
+        }
+      }
+      ui.screen = 'lanc'; ui.tab = 'ORCAMENTOS'; ui.orcId = o.id;
+      persist(); render();
+    });
+    return true;
+  }
+  if(action==='orc-excluir'){
+    const key = 'orc-'+o.id;
+    if(!isArmed(key)){ armDelete(key); render(); return true; }
+    delete ui.deleteArm[key];
+    const idx = state.orcamentos.findIndex(x=>x.id===o.id);
+    const [tirado] = state.orcamentos.splice(idx,1);
+    ui.orcId = null; persist(); render();
+    showToast(`Orçamento ${tirado.numero} excluído.`, ()=>{
+      if(!state.orcamentos.some(x=>x.id===tirado.id)) state.orcamentos.splice(Math.min(idx,state.orcamentos.length),0,tirado);
+      ui.orcId = tirado.id; persist(); render();
+    });
+    return true;
+  }
+  return action.startsWith('orc-');
+}
+
+/* ---------- PDF do orcamento (jsPDF, mesma cara da previa) ---------- */
+function orcGerarPDF(o){
+  if(!window.jspdf || !window.jspdf.jsPDF){
+    showToast('Não consegui carregar o gerador de PDF. Verifique sua conexão com a internet e tente de novo.');
+    return;
+  }
+  const b = state.business || {};
+  const t = orcTotais(o);
+  const { jsPDF } = window.jspdf;
+  const doc = new jsPDF({unit:'pt', format:'a4'});
+  const W = doc.internal.pageSize.getWidth(), Hp = doc.internal.pageSize.getHeight();
+  const mx = 48; let y = 54;
+  const OLIVA=[46,57,37], TINTA=[33,29,24], SUAVE=[106,99,86], CREME=[246,241,229], LINHA=[226,218,198];
+  const novaPagSe = h => { if(y + h > Hp - 60){ doc.addPage(); y = 54; } };
+  // marca: quadradinho oliva com a notinha
+  doc.setFillColor(...OLIVA); doc.roundedRect(mx, y-22, 30, 30, 7, 7, 'F');
+  doc.setFillColor(251,248,241); doc.rect(mx+9, y-17, 12, 18, 'F');
+  doc.setFillColor(164,189,130); doc.circle(mx+19, y-3, 4.2, 'F');
+  doc.setFont('helvetica','bold'); doc.setFontSize(15); doc.setTextColor(...TINTA);
+  doc.text(b.nomeFantasia || '', mx+40, y-6);
+  doc.setFont('helvetica','normal'); doc.setFontSize(8.5); doc.setTextColor(...SUAVE);
+  doc.text([b.cnpj?`CNPJ ${b.cnpj}`:'', b.email||'', b.telefone||''].filter(Boolean).join('  ·  '), mx+40, y+7);
+  doc.setFont('helvetica','bold'); doc.setFontSize(22); doc.setTextColor(...OLIVA);
+  doc.text('Orçamento', W-mx, y-4, {align:'right'});
+  doc.setFont('helvetica','normal'); doc.setFontSize(8.5); doc.setTextColor(...SUAVE);
+  doc.text(`${o.numero} · ${fmtDateBR(o.data)}`, W-mx, y+9, {align:'right'});
+  y += 22; doc.setDrawColor(...OLIVA); doc.setLineWidth(1.4); doc.line(mx, y, W-mx, y); y += 18;
+  // para / projeto
+  doc.setFillColor(...CREME); doc.roundedRect(mx, y, W-2*mx, 40, 6, 6, 'F');
+  doc.setFont('helvetica','bold'); doc.setFontSize(7); doc.setTextColor(122,115,98);
+  doc.text('PARA', mx+12, y+14); doc.text('PROJETO', W-mx-12, y+14, {align:'right'});
+  doc.setFontSize(11); doc.setTextColor(...TINTA);
+  doc.text(o.cliente||'—', mx+12, y+29); doc.text(o.projeto||'—', W-mx-12, y+29, {align:'right'});
+  y += 58;
+  // texto
+  doc.setFont('helvetica','normal'); doc.setFontSize(9.5); doc.setTextColor(58,52,42);
+  const linhasTxt = doc.splitTextToSize(orcTexto(o), W-2*mx);
+  linhasTxt.forEach(l=>{ novaPagSe(13); doc.text(l, mx, y); y += 13; });
+  y += 8;
+  // itens
+  doc.autoTable({
+    startY: y, margin: {left: mx, right: mx},
+    head: [['Descrição','Qtd','Valor un.','Subtotal']],
+    body: (o.itens||[]).map(it=>[it.descricao||'', String(it.qtd||''), 'R$ '+fmtBRL(parseBRL(it.valor)), 'R$ '+fmtBRL((parseInt(it.qtd,10)||0)*parseBRL(it.valor))]),
+    styles: {font:'helvetica', fontSize:9.5, textColor:TINTA, cellPadding:6, lineColor:[240,234,220], lineWidth:0.5},
+    headStyles: {fillColor:OLIVA, textColor:[244,238,221], fontStyle:'bold'},
+    columnStyles: {1:{halign:'right', cellWidth:40}, 2:{halign:'right', cellWidth:80}, 3:{halign:'right', cellWidth:86}},
+  });
+  y = doc.lastAutoTable.finalY + 16;
+  // totais
+  novaPagSe(90);
+  const xL = W/2 + 20;
+  doc.setFontSize(9.5); doc.setTextColor(...SUAVE);
+  doc.text('Soma', xL, y); doc.text('R$ '+fmtBRL(t.soma), W-mx, y, {align:'right'}); y += 15;
+  if(t.desc>0){ doc.text(`Desconto${o.descTipo==='pc'?` (${String(o.descValor).replace('.',',')}%)`:''}`, xL, y); doc.text('- R$ '+fmtBRL(t.desc), W-mx, y, {align:'right'}); y += 15; }
+  doc.setFillColor(...OLIVA); doc.roundedRect(xL-10, y-4, W-mx-xL+10, 32, 6, 6, 'F');
+  doc.setTextColor(244,238,221); doc.setFontSize(10); doc.text('Total', xL, y+16);
+  doc.setFont('helvetica','bold'); doc.setFontSize(15); doc.text('R$ '+fmtBRL(t.total), W-mx-10, y+17, {align:'right'});
+  y += 48;
+  // pagamento
+  const pag = [];
+  if(o.pag.pix) pag.push(['PIX À VISTA', 'R$ '+fmtBRL(t.pix), t.pixPc>0 ? `com ${String(o.pag.pixDesc).replace('.',',')}% de desconto extra` : '']);
+  if(o.pag.cartao) pag.push(['CARTÃO DE CRÉDITO', `em até ${Math.max(1,parseInt(o.pag.parc,10)||1)}x`, 'com acréscimo da taxa da maquininha']);
+  if(pag.length){
+    novaPagSe(90);
+    doc.setFont('helvetica','bold'); doc.setFontSize(7.5); doc.setTextColor(122,115,98);
+    doc.text('FORMA DE PAGAMENTO', mx, y); y += 8;
+    const bw = (W-2*mx-12)/2;
+    pag.forEach((p,i)=>{
+      const x = mx + i*(bw+12);
+      doc.setDrawColor(...LINHA); doc.setLineWidth(0.8); doc.roundedRect(x, y, bw, 46, 6, 6, 'S');
+      doc.setFont('helvetica','bold'); doc.setFontSize(7); doc.setTextColor(122,115,98); doc.text(p[0], x+10, y+13);
+      doc.setFontSize(11.5); doc.setTextColor(...TINTA); doc.text(p[1], x+10, y+28);
+      doc.setFont('helvetica','normal'); doc.setFontSize(8); doc.setTextColor(...SUAVE); if(p[2]) doc.text(p[2], x+10, y+40);
+    });
+    y += 56;
+    if(o.pag.sinal){ doc.setFillColor(...CREME); doc.roundedRect(mx, y, W-2*mx, 22, 5, 5, 'F'); doc.setFontSize(9); doc.setTextColor(58,52,42); doc.text('50% na aprovação para iniciar e 50% na entrega.', mx+10, y+14); y += 30; }
+  }
+  // rodape em todas as paginas
+  const n = doc.internal.getNumberOfPages();
+  for(let p=1;p<=n;p++){
+    doc.setPage(p);
+    doc.setDrawColor(...LINHA); doc.setLineWidth(0.6); doc.line(mx, Hp-44, W-mx, Hp-44);
+    doc.setFont('helvetica','normal'); doc.setFontSize(8); doc.setTextColor(122,115,98);
+    doc.text('ritmo. · sua produção, no ritmo certo', mx, Hp-30);
+    doc.text(b.nomeFantasia||'', W-mx, Hp-30, {align:'right'});
+  }
+  const nomeArq = `Orçamento ${o.numero}${o.cliente ? ' - '+o.cliente : ''}.pdf`.replace(/[\\/:*?"<>|]/g,'-');
+  const blob = doc.output('blob');
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = nomeArq;
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(()=> URL.revokeObjectURL(url), 60000);
+}
+
 function generatePDF(clientId, ym){
   const c = clientById(clientId);
   if(!c) return;
@@ -2896,7 +3379,7 @@ function esqueletoHtml(){
   return `<div class="off-app" aria-hidden="true">
     <div class="off-topo">
       <div class="off-marca"><span class="off-mic">${RITMO_ICONE_ANIM}</span><div><span class="tr-wm">ritmo<i>.</i></span><span class="tr-slo">sua produção, no ritmo certo</span></div></div>
-      <div class="off-nav">${nav(iconChart(), 'Painel', true)}${nav(iconList(), 'Lançamentos')}${nav(iconDoc(15), 'Notas emitidas')}${nav(iconGear(15), 'Configurações')}</div>
+      <div class="off-nav">${nav(iconChart(), 'Painel', true)}${nav(iconList(), 'Lançamentos')}${nav(iconOrc(15), 'Orçamentos')}${nav(iconDoc(15), 'Notas emitidas')}${nav(iconGear(15), 'Configurações')}</div>
     </div>
     <div class="off-grade">${cartao('Faturado no ano')}${cartao('Limite MEI')}${cartao('Meta do mês')}</div>
     <div class="off-card off-largo"><span class="off-lbl">A cobrar</span>${linha('38%')}${linha('30%')}${linha('44%')}</div>
@@ -2968,7 +3451,7 @@ async function boot(){
   clearTimeout(esq); clearTimeout(lento);
   appCarregado = true;
   ui.tab = state.clientOrder[0] || 'FATURAMENTO';
-  if(ui.tab && ui.tab!=='FATURAMENTO' && ui.tab!=='CONFIG') ensureClientView(ui.tab);
+  if(ui.tab && ui.tab!=='FATURAMENTO' && ui.tab!=='CONFIG' && ui.tab!=='ORCAMENTOS') ensureClientView(ui.tab);
   render();
   attachStaticHandlers();
   // edições que tinham ficado no aparelho sem subir: manda agora
