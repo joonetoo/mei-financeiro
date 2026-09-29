@@ -1507,6 +1507,9 @@ html.escuro .tr-oi em{color:#D9AE55;}
 .month-pill.active .lc-col{background:#2E3925;box-shadow:0 8px 16px -10px rgba(34,30,25,.7);}
 .month-pill.active .lc-bar{background:#E2B659;}
 .month-pill.active .lc-m{color:var(--ink);font-weight:800;}
+/* o desenho antigo dos meses marcava aberto/fechado com contorno e fundo; aqui quem marca e o pontinho / ✓ */
+.months.lc-bars .month-pill.open-p,.months.lc-bars .month-pill.closed{box-shadow:none;background:none;color:var(--ink-soft);}
+.months.lc-bars .month-pill.closed::before{content:none;}
 .month-pill.open-p .lc-m::after{content:"";display:inline-block;width:5px;height:5px;border-radius:50%;background:#B98A2B;margin-left:4px;vertical-align:2px;}
 .month-pill.closed .lc-m::after{content:"✓";font-size:10px;color:var(--sage);margin-left:3px;}
 .lc-lista .action-top{margin:0 0 12px;}
