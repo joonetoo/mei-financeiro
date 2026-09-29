@@ -1092,9 +1092,17 @@ body{overflow-x:hidden;}
 
 /* marca no topo + faixa do beta */
 .ritmo-marca{display:flex;align-items:center;gap:8px;margin-bottom:6px;}
-.ritmo-marca svg{width:28px;height:28px;display:block;flex:0 0 auto;}
+.ritmo-marca>svg{width:28px;height:28px;display:block;flex:0 0 auto;}
 .ritmo-marca .wm{font-family:'Fraunces',Georgia,serif;font-weight:700;font-size:19px;letter-spacing:-.02em;line-height:1;color:var(--ink);}
 .ritmo-marca .wm i{font-style:normal;color:#B98A2B;}
+/* notinha imprimindo + check (so no icone animado) */
+@keyframes rn-print{0%{transform:translateY(-70px)}25%{transform:translateY(-52px)}34%{transform:translateY(-52px)}60%{transform:translateY(-24px)}68%{transform:translateY(-24px)}100%{transform:translateY(0)}}
+@keyframes rn-pop{0%{transform:scale(0)}70%{transform:scale(1.18)}100%{transform:scale(1)}}
+@keyframes rn-draw{from{stroke-dashoffset:1}to{stroke-dashoffset:0}}
+.rn-paper{animation:rn-print 1.5s cubic-bezier(.4,0,.3,1) both;}
+.rn-circ{animation:rn-pop .45s cubic-bezier(.3,1.4,.5,1) 1.55s both;}
+.rn-ck{stroke-dasharray:1;animation:rn-draw .4s ease-out 1.9s both;}
+@media (prefers-reduced-motion:reduce){.rn-paper,.rn-circ,.rn-ck{animation:none}}
 .faixa-beta{margin:0 auto 12px;max-width:560px;text-align:center;font:800 11px 'Public Sans',sans-serif;letter-spacing:.08em;color:#2A1C06;background:#F0C987;border-radius:8px;padding:5px 10px;}
 
 /* olho de ocultar valores: so o icone, redondo */
@@ -1184,7 +1192,7 @@ body{overflow-x:hidden;}
   .topbar{padding:48px 4px 20px;gap:10px;}
   .brand h1{font-size:30px;line-height:1.1;}
   .brand .sub{font-size:13px;margin-top:6px;}
-  .ritmo-marca svg{width:34px;height:34px;}
+  .ritmo-marca>svg{width:34px;height:34px;}
   .ritmo-marca .wm{font-size:22px;}
   .faixa-beta{margin-top:12px;}
   .privacy-toggle{width:48px;height:48px;background:var(--surface);border:0;box-shadow:0 1px 2px rgba(34,30,25,.10);}

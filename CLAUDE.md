@@ -22,7 +22,7 @@ celular, via Remote Control) deve ler este arquivo antes de agir. O código **n�
 | Linha dos dados | `jnf-financeiro-v1` (backups `jnf-financeiro-v1-backup-0` … `-6`) |
 | Cópia pra testes | `jnf-financeiro-teste` (servidor `mei-teste`, porta 5192) |
 | **Beta "Ritmo"** | https://joonetoo.github.io/mei-beta/ — ramo **`beta`** do mesmo repositório, publica com `npm run deploy-beta` (repo `joonetoo/mei-beta`), linha **`mei-beta`** (cópia; o build beta não contém `jnf-financeiro-v1`). Depois de mexer no beta, **voltar pro ramo `main`** (`npm run deploy` no ramo beta publicaria o beta no link real!). |
-| Visual atual | **Ritmo** (2026-09-27): creme um tico mais escuro, barra oliva, Liquid Glass no Mac, One UI no celular, ícone creme "clipes + agulha" (Fraunces + Public Sans) |
+| Visual atual | **Ritmo** (2026-09-27): creme um tico mais escuro, barra oliva, Liquid Glass no Mac, One UI no celular, ícone oliva "notinha + check" (desde 2026-09-29, animado só no carregamento) (Fraunces + Public Sans) |
 
 ---
 
