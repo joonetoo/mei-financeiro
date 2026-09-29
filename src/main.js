@@ -402,6 +402,8 @@ function migrateState(){
   // dia em que o cliente costuma fechar (so estimativa no Painel): 0 = ultimo dia do mes
   const DIA_FECHA_PADRAO = {fabio:0, wide:4, wad:8};
   state.clients.forEach(c=>{ if(c.diaFechamento===undefined) c.diaFechamento = DIA_FECHA_PADRAO[c.id] ?? 0; });
+  // CNPJ do cliente (so pra copiar na hora de emitir a nota; campo novo, so acrescenta)
+  state.clients.forEach(c=>{ if(c.cnpj===undefined) c.cnpj = ''; });
   if(!state.clientOrder) state.clientOrder = state.clients.map(c=>c.id);
   if(!state.videos) state.videos = {};
   if(!state.notas) state.notas = d.notas;
@@ -809,6 +811,7 @@ let ui = {
   metaDraft: '', // texto sendo digitado na meta — sobrevive a um render() no meio da digitacao
   metaFocus: false,
   semanasYm: null, // mes do cartao "Semana a semana" (null = mes atual) — so tela, nao e salvo
+  fecharJanela: null, // {cid, ym, etapa:'dados'|'feito'} enquanto a janela de fechar periodo esta aberta
   confirmClose: null, // 'clientId|ym' enquanto a confirmacao de fechar periodo esta aberta
   tab: null, // clientId | 'FATURAMENTO' | 'CONFIG'
   clientView: {}, // clientId -> {year, month}
@@ -1041,30 +1044,45 @@ function periodoStatusHtml(cid, ym, total){
 
 function fecharPeriodoHtml(cid, ym, rows, total){
   if(periodoFechado(cid, ym)) return '';
-  const c = clientById(cid);
-  const key = cid+'|'+ym;
-  if(ui.confirmClose !== key){
-    return `<button class="btn gold" data-action="fechar-periodo" data-client="${cid}" data-ym="${ym}" ${rows.length===0?'disabled':''}>Fechar período e lançar nota</button>`;
+  return `<button class="btn gold" data-action="fechar-periodo" data-client="${cid}" data-ym="${ym}" ${rows.length===0?'disabled':''}>Fechar período</button>`;
+}
+
+// janela de fechar periodo: card de vidro no Mac, tela cheia no celular (CSS)
+function janelaFecharHtml(){
+  const j = ui.fecharJanela;
+  if(!j) return '';
+  const c = clientById(j.cid);
+  if(!c) return '';
+  const total = monthTotal(j.cid, j.ym);
+  const f = fechamentoDe(j.cid, j.ym);
+  const desde = inicioPeriodo(j.cid, j.ym);
+  const faixa = `${desde ? ddmm(desde)+' a ' : ''}${ddmm(fechamentoPrevisto(j.cid, j.ym))}`;
+  const campo = (rot, valor) => `<div class="fj-campo"><div class="fj-v"><span class="fj-k">${rot}</span><span class="sensitive">${esc(valor)}</span></div><button type="button" class="fj-copiar" data-action="copiar" data-copy="${esc(valor)}">Copiar</button></div>`;
+  if(j.etapa==='feito'){
+    const antes = f ? parseBRL(f.valor) : total;
+    return `<div class="fj-veu"><div class="fj-janela" role="dialog" aria-modal="true" aria-label="Nota lançada">
+      <div class="fj-topo"><h2>Nota lançada</h2><button type="button" class="fj-x" data-action="fechar-janela" aria-label="Fechar janela">✕</button></div>
+      <div class="fj-ok"><b>✓ ${esc(c.nome)} · <span class="sensitive">R$ ${fmtBRL(antes)}</span></b><span>Entrou em Notas emitidas e já conta no limite MEI.</span></div>
+      <span class="fj-rot">Quer guardar o relatório do mês?</span>
+      <button type="button" class="btn primary" data-action="fechar-salvar-rel">Salvar relatório do mês (PDF)</button>
+      <button type="button" class="btn" data-action="fechar-janela">Agora não, gero depois</button>
+    </div></div>`;
   }
-  const datas = rows.map(r=>r.data).filter(Boolean).sort();
-  const faixa = datas.length ? ` (de ${ddmm(datas[0])} a ${ddmm(datas[datas.length-1])})` : '';
-  const f = fechamentoDe(cid, ym);
-  const antiga = f && f.aberto ? acharNota(f.notaId) : null;
-  const linhaNota = antiga
-    ? `Atualiza a nota lançada antes (<span class="sensitive">R$ ${fmtBRL(parseBRL(antiga.nota.valor))}</span> em ${antiga.nota.data ? ddmm(antiga.nota.data) : 'sem data'}) pra <b class="sensitive">R$ ${fmtBRL(total)}</b>, com a data de hoje — sem duplicar`
-    : `Lança a nota de <b class="sensitive">R$ ${fmtBRL(total)}</b> com a data de hoje, ${ddmm(TODAY_ISO)}, em Notas emitidas`;
-  return `<div class="confirm-fechar">
-    <div class="cf-title">Fechar o período de ${nomeMesYm(ym)} de ${esc(c ? c.nome : '')}?</div>
-    <ul>
-      <li><b>${plural(rows.length,'vídeo','vídeos')} · <span class="sensitive">R$ ${fmtBRL(total)}</span></b>${faixa}</li>
-      <li>${linhaNota}</li>
-      <li>Marca ${nomeMesYm(ym)} como fechado ✓ e os próximos vídeos vão pra <b>${nomeMesYm(shiftYm(ym,1))}</b></li>
-    </ul>
-    <div class="cf-actions">
-      <button class="btn gold" data-action="fechar-confirm" data-client="${cid}" data-ym="${ym}">Fechar e lançar nota</button>
-      <button class="btn" data-action="fechar-cancel">Cancelar</button>
-    </div>
-  </div>`;
+  const cnpj = (c.cnpj||'').trim();
+  const cnpjHtml = cnpj
+    ? campo('CNPJ do cliente', cnpj)
+    : `<div class="fj-vazio">Este cliente ainda não tem CNPJ cadastrado. <button type="button" class="fj-link" data-action="fechar-cadastrar-cnpj">Cadastrar em Configurações</button></div>`;
+  return `<div class="fj-veu"><div class="fj-janela" role="dialog" aria-modal="true" aria-label="Fechar período">
+    <div class="fj-topo"><h2>Fechar período</h2><button type="button" class="fj-x" data-action="fechar-janela" aria-label="Fechar janela">✕</button></div>
+    <div class="fj-cli"><span class="fj-nome">${esc(c.nome)}</span><span class="fj-faixa">${faixa}</span></div>
+    <span class="fj-rot">1. Copie e cole no site da Receita</span>
+    ${cnpjHtml}
+    ${campo('Valor da nota', fmtBRL(total))}
+    <a class="btn gold fj-receita" href="https://www.nfse.gov.br/EmissorNacional" target="_blank" rel="noopener noreferrer">2. Abrir o site da nota MEI</a>
+    <span class="fj-rot">3. Depois de emitir, volte aqui</span>
+    <button type="button" class="btn primary" data-action="fechar-ja-emiti" data-client="${j.cid}" data-ym="${j.ym}">Já emiti a nota</button>
+    <span class="fj-dica">Sua senha nunca passa pelo Ritmo: o login é direto no site do governo.</span>
+  </div></div>`;
 }
 
 /* ---------------- Painel (tela de acompanhamento, so leitura) ---------------- */
@@ -1549,6 +1567,7 @@ function render(){
       <div class="main">${renderMain()}</div>
     </div>`}
     ${ui.toast ? renderToast() : ''}
+    ${ui.fecharJanela ? janelaFecharHtml() : ''}
   `;
   ui.screenAnim = false;
   attachHandlers();
@@ -1911,7 +1930,7 @@ function renderConfig(){
 
     <div class="section-title">Quando cada cliente costuma fechar</div>
     <p style="color:var(--ink-soft);font-size:13px;max-width:60ch;margin:0 0 6px;">
-      Só pra estimativa no Painel. O fechamento de verdade é quando você aperta “Fechar período e lançar nota”.
+      Só pra estimativa no Painel. O fechamento de verdade é quando você aperta “Fechar período” e depois “Já emiti a nota”.
     </p>
     <div>${state.clientOrder.map(id=>{
       const c = clientById(id);
@@ -1923,6 +1942,20 @@ function renderConfig(){
         <div class="client-avatar ${chipClass(id)}">${esc(initials(c.nome))}</div>
         <span class="fecha-nome">${esc(c.nome)}</span>
         <select data-role="client-fecha" data-client="${id}" aria-label="Quando ${esc(c.nome)} costuma fechar">${opts}</select>
+      </div>`;
+    }).join('')}</div>
+
+    <div class="section-title">CNPJ dos clientes</div>
+    <p style="color:var(--ink-soft);font-size:13px;max-width:60ch;margin:0 0 6px;">
+      Só pra você copiar e colar no site da Receita na hora de emitir a nota. Fica guardado junto com o cadastro do cliente.
+    </p>
+    <div>${state.clientOrder.map(id=>{
+      const c = clientById(id);
+      if(!c) return '';
+      return `<div class="client-mgmt-row fecha-row">
+        <div class="client-avatar ${chipClass(id)}">${esc(initials(c.nome))}</div>
+        <span class="fecha-nome">${esc(c.nome)}</span>
+        <input class="sensitive cnpj-in" type="text" inputmode="numeric" autocomplete="off" placeholder="00.000.000/0001-00" value="${esc(c.cnpj||'')}" data-role="client-cnpj" data-client="${id}" aria-label="CNPJ de ${esc(c.nome)}">
       </div>`;
     }).join('')}</div>
 
@@ -2049,6 +2082,11 @@ function onAppInputInner(e){
       const railChip = document.querySelector(`.rail .tab-btn[data-tab="${t.dataset.client}"] .tab-chip`);
       if(railChip) railChip.textContent = initials(t.value);
     }
+  } else if(role==='client-cnpj'){
+    const c = clientById(t.dataset.client);
+    if(!c) return;
+    c.cnpj = t.value;
+    persist();
   } else if(role==='client-fecha'){
     const c = clientById(t.dataset.client);
     if(!c) return;
@@ -2300,19 +2338,36 @@ function onAppClickInner(e){
     generatePDF(btn.dataset.client, btn.dataset.ym);
   }
   else if(action==='fechar-periodo'){
-    ui.confirmClose = btn.dataset.client+'|'+btn.dataset.ym;
+    if(periodoFechado(btn.dataset.client, btn.dataset.ym)) return;
+    ui.fecharJanela = {cid: btn.dataset.client, ym: btn.dataset.ym, etapa: 'dados'};
     render();
   }
-  else if(action==='fechar-cancel'){
-    ui.confirmClose = null;
+  else if(action==='fechar-janela'){
+    ui.fecharJanela = null;
     render();
   }
-  else if(action==='fechar-confirm'){
+  else if(action==='fechar-cadastrar-cnpj'){
+    ui.fecharJanela = null;
+    ui.screen = 'lanc'; ui.tab = 'CONFIG'; ui.screenAnim = true;
+    render();
+  }
+  else if(action==='copiar'){
+    const v = btn.dataset.copy || '';
+    const ok = ()=>{ btn.textContent = 'Copiado'; btn.classList.add('ok'); setTimeout(()=>{ btn.textContent = 'Copiar'; btn.classList.remove('ok'); }, 1500); };
+    try{ navigator.clipboard.writeText(v).then(ok, ()=>copiarManual(v, ok)); }catch(e){ copiarManual(v, ok); }
+  }
+  else if(action==='fechar-salvar-rel'){
+    const j = ui.fecharJanela;
+    ui.fecharJanela = null;
+    render();
+    if(j) generatePDF(j.cid, j.ym);
+  }
+  else if(action==='fechar-ja-emiti'){
     refreshToday();
     const client = btn.dataset.client, ym = btn.dataset.ym;
-    ui.confirmClose = null;
     const c = clientById(client);
-    if(!c || periodoFechado(client, ym)){ render(); return; }
+    if(!c || periodoFechado(client, ym)){ ui.fecharJanela = null; render(); return; }
+    ui.fecharJanela = {cid: client, ym, etapa: 'feito'};
     const total = monthTotal(client, ym);
     if(!state.fechamentos[client]) state.fechamentos[client] = {};
     const antes = state.fechamentos[client][ym]; // undefined, ou {aberto:true, notaId} se foi reaberto
@@ -2341,6 +2396,7 @@ function onAppClickInner(e){
     persist();
     render();
     showToast(`${c.nome}: ${nomeMesYm(ym)} fechado · nota de R$ ${fmtBRL(total)} lançada.`, ()=>{
+      ui.fecharJanela = null;
       desfazerNota();
       if(antes===undefined) delete state.fechamentos[client][ym];
       else state.fechamentos[client][ym] = antes;
@@ -2524,6 +2580,23 @@ function onImportFile(e){
 }
 
 /* ---------------- PDF report ---------------- */
+// Esc fecha a janela de fechar periodo
+document.addEventListener('keydown', e=>{
+  if(e.key==='Escape' && ui.fecharJanela){ ui.fecharJanela = null; render(); }
+});
+
+// plano B da copia (navegadores que recusam clipboard): seleciona por um campo escondido
+function copiarManual(v, ok){
+  try{
+    const t = document.createElement('textarea');
+    t.value = v; t.style.position = 'fixed'; t.style.opacity = '0';
+    document.body.appendChild(t); t.select();
+    const feito = document.execCommand('copy');
+    document.body.removeChild(t);
+    if(feito) ok();
+  }catch(e){}
+}
+
 function generatePDF(clientId, ym){
   const c = clientById(clientId);
   if(!c) return;

@@ -144,7 +144,12 @@ Conta pela **data do vídeo** (produção), não pela aba.
 - Fábio: dia 01 ao último dia do mês. Wide: dia 05 ao dia 04. WAD: ~08 ao 08, mas varia (07/08/09).
 - "Fechar" um cliente = emitir e enviar a nota **na hora**; só depois ele começa a lançar no mês seguinte.
   Então cada aba de mês do cliente **é** o período de cobrança dele.
-- Botão "Fechar período e lançar nota" (confirmação + desfazer 10s) cria a nota no ano da data de hoje.
+- Botão **"Fechar período"** (desde 2026-09-29, mockup https://claude.ai/artifact/XbDxpcfLnKUa2jcShttvi5) abre uma janela
+  (card de vidro no Mac, tela cheia no celular) com **CNPJ do cliente + valor da nota** pra copiar e o link do
+  Emissor Nacional (nfse.gov.br — o Joel emite lá, com o gov.br dele; o app NUNCA guarda senha/certificado).
+  "Já emiti a nota" lança a nota (desfazer 10s) e oferece salvar o relatório PDF. `client.cnpj` (campo novo,
+  cadastrado em Configurações → "CNPJ dos clientes"). Não guardamos o número da nota (o Joel não usa).
+  A nota entra no ano da data de hoje.
   Reabrir e fechar de novo **atualiza** a mesma nota, nunca duplica.
 - Dados: `state.fechamentos[cliente][AAAA-MM] = {data, notaId, valor}` ou `{aberto:true, notaId}`;
   `client.diaFechamento` (0 = último dia; N = dia N do mês seguinte; padrão fabio 0, wide 4, wad 8 —
