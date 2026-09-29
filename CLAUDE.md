@@ -6,7 +6,7 @@
 
 Projeto do app **MEI**, que desde 2026-09-27 se chama **Ritmo** ("ritmo.", antes "Joel Neto Filmes — Controle Financeiro"). Qualquer conversa aberta aqui (no Mac ou pelo
 celular, via Remote Control) deve ler este arquivo antes de agir. O código **não mora aqui**: mora em
-`/Users/joelneto/Documents/CLAUDE/MEI`. Esta pasta só guarda o contexto e os atalhos.
+`/Users/joelneto/Documents/CLAUDE/Ritmo - sua produção no ritmo certo`. Esta pasta só guarda o contexto e os atalhos.
 
 > Em 2026-09-27 o app de finanças pessoais (antigo "Finanças da Casa", agora **Oink**) ganhou projeto próprio:
 > `/Users/joelneto/Documents/CLAUDE/Oink - suas contas sem susto` (com o código em `app/`). Nada do Oink fica aqui.
@@ -15,7 +15,7 @@ celular, via Remote Control) deve ler este arquivo antes de agir. O código **n�
 | | **MEI** |
 |---|---|
 | Pra que serve | Faturamento de edição de vídeo por cliente, notas, limite MEI |
-| Pasta do código | `/Users/joelneto/Documents/CLAUDE/MEI` |
+| Pasta do código | `/Users/joelneto/Documents/CLAUDE/Ritmo - sua produção no ritmo certo` (desde 2026-09-28; antes `CLAUDE/MEI`. Se o `package.json` não estiver direto nela, procurar numa subpasta como `app/`) |
 | Tecnologia | Vite + **JavaScript puro** (`src/main.js` ~2.000 linhas + CSS em `index.html`) |
 | Link do app | https://joonetoo.github.io/mei-financeiro/ |
 | Código no GitHub | github.com/joonetoo/mei-financeiro (público) |
@@ -185,7 +185,7 @@ do navegador ficam velhas depois de qualquer clique — buscar de novo a cada pa
 ## 4. Como fazer uma mudança (passo a passo)
 
 1. Entender o pedido; se for visual ou função nova → **mockup primeiro** e esperar aprovação.
-2. Editar o código em `/Users/joelneto/Documents/CLAUDE/MEI`.
+2. Editar o código em `/Users/joelneto/Documents/CLAUDE/Ritmo - sua produção no ritmo certo`.
 3. **Testar sem tocar nos dados reais:**
    - MEI: iniciar o servidor `mei-teste` (em `.claude/launch.json`) — usa a cópia `jnf-financeiro-teste`.
      Depois conferir que o build de produção tem **0** ocorrências de `jnf-financeiro-teste`.
@@ -198,7 +198,7 @@ do navegador ficam velhas depois de qualquer clique — buscar de novo a cada pa
 6. **Publicar:** `npm run deploy` na pasta do app. Às vezes a trava de segurança bloqueia publicar —
    aí entregar ao Joel o comando pronto pra colar no Terminal, por exemplo:
    ```bash
-   cd "/Users/joelneto/Documents/CLAUDE/MEI" && export PATH="$HOME/.local/bin:$PATH" && npm run deploy
+   cd "/Users/joelneto/Documents/CLAUDE/Ritmo - sua produção no ritmo certo" && export PATH="$HOME/.local/bin:$PATH" && npm run deploy
    ```
    O GitHub Pages demora ~1 min pra atualizar.
 7. Conferir no link real que carregou com os dados dele. Dizer que os dados não foram tocados.
