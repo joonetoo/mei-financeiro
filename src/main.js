@@ -161,7 +161,8 @@ function defaultState(){
       cnpj:'46.333.168/0001-10',
       pix:'46.333.168/0001-10',
       email:'',
-      telefone:''
+      telefone:'',
+      apelido:'' // como a saudacao do topo te chama (vazio = primeiro nome acima)
     },
     meiLimiteAnual: 81000,
     clients:[
@@ -1610,6 +1611,29 @@ function renderPainel(){
 function iconChart(size=15){return `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v18h18"/><path d="M7 15l4-4 3 3 5-6"/></svg>`;}
 function iconList(size=15){return `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/></svg>`;}
 
+/* topo (2026-09-29): marca grande + slogan a esquerda, saudacao + data a direita.
+   Nome/CNPJ da empresa saem do topo (continuam no PDF e em Configuracoes). */
+const DIA_LONGO = ['Domingo','Segunda','Terça','Quarta','Quinta','Sexta','Sábado'];
+const MES_CAP = ['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'];
+function nomeSaudacao(){
+  const b = state.business || {};
+  const ap = (b.apelido||'').trim();
+  if(ap) return ap;
+  return ((b.nomeFantasia||'').trim().split(/\s+/)[0]) || '';
+}
+function topoMarcaHtml(){
+  const agora = new Date();
+  const h = agora.getHours();
+  const oi = h < 12 ? 'Bom dia' : h < 18 ? 'Boa tarde' : 'Boa noite';
+  const nome = nomeSaudacao();
+  const dd = String(agora.getDate()).padStart(2,'0'), mm = String(agora.getMonth()+1).padStart(2,'0');
+  return `<span class="tr-ic">${RITMO_ICONE}</span>
+      <span class="tr-wm">ritmo<i>.</i></span>
+      <span class="tr-slo">sua produção, no ritmo certo</span>
+      <span class="tr-oi">${oi}${nome ? `, <em>${esc(nome)}</em>` : ''}</span>
+      <span class="tr-dt"><span class="longo">${DIA_LONGO[agora.getDay()]}, ${agora.getDate()} de ${MES_CAP[agora.getMonth()]}</span><span class="curto">${DIA_LONGO[agora.getDay()].slice(0,3)}, ${dd}/${mm}</span></span>`;
+}
+
 function saveStateHtml(){
   const cls = saveMode==='saving' ? ' saving' : saveMode==='error' ? ' error' : '';
   const txt = saveMode==='saving' ? 'salvando…' : saveMode==='error' ? 'erro ao salvar — verifique a conexão' : 'salvo';
@@ -1626,12 +1650,8 @@ function render(){
   const metaSel = ae && ae.id==='meta-in' ? [ae.selectionStart, ae.selectionEnd] : null;
   app.innerHTML = `
     ${BETA ? '<div class="faixa-beta">VERSÃO DE TESTE · os dados daqui são uma cópia</div>' : ''}
-    <div class="topbar">
-      <div class="brand">
-        <div class="ritmo-marca">${RITMO_ICONE}<span class="wm">ritmo<i>.</i></span></div>
-        <h1>${esc(state.business.nomeFantasia||'Minha empresa')}</h1>
-        <div class="sub sensitive">CNPJ ${esc(state.business.cnpj||'—')}</div>
-      </div>
+    <div class="topbar tr">
+      ${topoMarcaHtml()}
       <div class="screen-nav" role="group" aria-label="Tela">
         <span class="screen-nav-pill"></span>
         ${navBtn('painel', iconChart(), 'Painel')}
@@ -1997,6 +2017,8 @@ function renderConfig(){
     <div class="form-grid">
       <div class="field"><label>Nome fantasia</label>
         <input type="text" value="${esc(b.nomeFantasia)}" data-role="business-field" data-field="nomeFantasia"></div>
+      <div class="field"><label>Como te chamar (saudação do topo)</label>
+        <input type="text" value="${esc(b.apelido||'')}" placeholder="${esc(nomeSaudacao()||'Seu nome')}" data-role="business-field" data-field="apelido"></div>
       <div class="field"><label>Razão social</label>
         <input type="text" value="${esc(b.razaoSocial)}" data-role="business-field" data-field="razaoSocial"></div>
       <div class="field"><label>CNPJ</label>
@@ -2163,6 +2185,10 @@ function onAppInputInner(e){
     // topbar shows nomeFantasia/cnpj live — patch just those two text nodes
     // directly instead of a full render, so the field being typed in is
     // never touched.
+    if(t.dataset.field==='apelido' || t.dataset.field==='nomeFantasia'){
+      const em = document.querySelector('.topbar .tr-oi em');
+      if(em) em.textContent = nomeSaudacao();
+    }
     if(t.dataset.field==='nomeFantasia'){
       const h1 = document.querySelector('.topbar .brand h1');
       if(h1) h1.textContent = t.value || 'Minha empresa';
