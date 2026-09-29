@@ -462,6 +462,10 @@ Este orçamento vale por ${t.validade||"15 dias"}. Qualquer dúvida, fico à dis
       <button type="button" class="oc-voltar" data-action="orc-voltar">‹ Orçamentos</button>
       <div class="oc-num"><b>${T(t.numero)}</b><span>${Y(t.data)}</span></div>
       ${Zc(t.status)}
+      <div class="oc-topo-acoes">
+        ${t.status!=="aprovado"?'<button type="button" class="btn gold" data-action="orc-aprovar">Aprovado: criar aba do cliente</button>':""}
+        <button type="button" class="btn ${o?"danger-step confirming":"danger-step"}" data-action="orc-excluir">${o?"Toque de novo pra excluir":"Excluir"}</button>
+      </div>
     </div>
 
     <div class="lc-card oc-calc">
@@ -515,8 +519,6 @@ Este orçamento vale por ${t.validade||"15 dias"}. Qualquer dúvida, fico à dis
 
     <div class="oc-acoes">
       <button type="button" class="btn primary" data-action="orc-pdf">Baixar PDF</button>
-      ${t.status!=="aprovado"?'<button type="button" class="btn gold" data-action="orc-aprovar">Aprovado: criar aba do cliente</button>':""}
-      <button type="button" class="btn ${o?"danger-step confirming":"danger-step"}" data-action="orc-excluir">${o?"Toque de novo pra excluir":"Excluir"}</button>
     </div>
    </div>
    <div class="oc-prev-col"><div class="oc-prev-rot">Prévia do PDF</div><div class="oc-folha" id="oc-folha">${wa(t)}</div></div>
