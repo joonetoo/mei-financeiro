@@ -201,6 +201,7 @@ const LS = {
   fotoData: `jnf-last-foto-date:${STORAGE_KEY}`,
   outbox: `jnf-outbox:${STORAGE_KEY}:`,       // + id da aba
   histFila: `jnf-hist-fila:${STORAGE_KEY}`,
+  ordem: `ritmo-ordem:${STORAGE_KEY}`,        // lista de videos virada (so tela, por aparelho)
 };
 const TAB_ID = uid('aba');
 function lsGet(k){ try{ return localStorage.getItem(k); }catch(e){ return null; } }
@@ -811,6 +812,8 @@ let ui = {
   metaDraft: '', // texto sendo digitado na meta — sobrevive a um render() no meio da digitacao
   metaFocus: false,
   semanasYm: null, // mes do cartao "Semana a semana" (null = mes atual) — so tela, nao e salvo
+  ordemDesc: lsGet(`ritmo-ordem:${STORAGE_KEY}`)==='desc', // true = mais recentes primeiro (so tela)
+  cal: null, // calendario aberto: {tipo:'video'|'nota', client, ym, year, row, mes:'AAAA-MM'}
   fecharJanela: null, // {cid, ym, etapa:'dados'|'feito'} enquanto a janela de fechar periodo esta aberta
   confirmClose: null, // 'clientId|ym' enquanto a confirmacao de fechar periodo esta aberta
   tab: null, // clientId | 'FATURAMENTO' | 'CONFIG'
@@ -1040,6 +1043,71 @@ function periodoStatusHtml(cid, ym, total){
       <span>${MES_NOME[ym.slice(5)]}${desde ? ` · desde ${ddmm(desde)}` : ''} · fecha ${aprox ? 'por volta de' : 'dia'} ${ddmm(fechamentoPrevisto(cid, ym))}</span></div>`;
   }
   return '';
+}
+
+/* ---------------- lista virada + calendario (2026-09-29) ---------------- */
+// devolve [linha, indice guardado] na ordem da tela; a ordem salva nunca muda
+function ordenar(rows){
+  const pares = rows.map((r,i)=>[r,i]);
+  return ui.ordemDesc ? pares.reverse() : pares;
+}
+const ICONE_CAL = `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><rect x="3" y="5" width="18" height="16" rx="3"/><path d="M3 10h18M8 3v4M16 3v4"/></svg>`;
+function botaoData(iso, attrs){
+  const txt = iso ? iso.split('-').reverse().join('/') : 'sem data';
+  return `<button type="button" class="cell-date${iso?'':' vazia'}" data-action="abrir-cal" ${attrs} aria-label="Data: ${txt}. Toque pra mudar">${ICONE_CAL}<span>${txt}</span></button>`;
+}
+function calLinha(){
+  const c = ui.cal;
+  if(!c) return null;
+  if(c.tipo==='video') return getVideos(c.client, c.ym).find(r=>r.id===c.row) || null;
+  return (state.notas[c.year]||[]).find(r=>r.id===c.row) || null;
+}
+const MES_LONGO = ['janeiro','fevereiro','março','abril','maio','junho','julho','agosto','setembro','outubro','novembro','dezembro'];
+function calendarioHtml(){
+  const linha = calLinha();
+  if(!linha){ ui.cal = null; return ''; }
+  const sel = linha.data || '';
+  const [y, m] = ui.cal.mes.split('-').map(Number);
+  const comVideo = ui.cal.tipo==='video' ? videosPorData() : {};
+  const primeiro = new Date(y, m-1, 1).getDay();
+  const nDias = new Date(y, m, 0).getDate();
+  const total = Math.ceil((primeiro + nDias)/7)*7;
+  let dias = '';
+  for(let k=0; k<total; k++){
+    const dt = new Date(y, m-1, 1 + k - primeiro);
+    const iso = localISO(dt);
+    const fora = dt.getMonth() !== m-1;
+    const cls = [fora?'fora':'', iso===TODAY_ISO?'hoje':'', iso===sel?'sel':''].filter(Boolean).join(' ');
+    dias += `<button type="button" class="${cls}" data-action="cal-dia" data-dia="${iso}" aria-label="${dt.getDate()} de ${MES_LONGO[dt.getMonth()]}${iso===sel?' (escolhido)':''}">${dt.getDate()}${comVideo[iso] && !fora ? '<i></i>' : ''}</button>`;
+  }
+  const limpar = ui.cal.tipo==='nota' && sel ? `<button type="button" data-action="cal-limpar">Sem data</button>` : '';
+  return `<div class="cal-veu" data-action="cal-fechar"></div>
+  <div class="cal-pop" role="dialog" aria-modal="true" aria-label="Escolher data">
+    <span class="cal-alca"></span>
+    <div class="cal-top"><b>${MES_LONGO[m-1]} <span>${y}</span></b>
+      <div class="cal-nav"><button type="button" data-action="cal-mes" data-dir="-1" aria-label="Mês anterior">‹</button><button type="button" data-action="cal-mes" data-dir="1" aria-label="Próximo mês">›</button></div></div>
+    <div class="cal-sem" aria-hidden="true"><span>D</span><span>S</span><span>T</span><span>Q</span><span>Q</span><span>S</span><span>S</span></div>
+    <div class="cal-dias">${dias}</div>
+    <div class="cal-pe">${ui.cal.tipo==='video' ? '<span class="cal-leg"><i></i>dia com vídeo</span>' : limpar || '<span></span>'}<button type="button" data-action="cal-dia" data-dia="${TODAY_ISO}">Hoje</button></div>
+  </div>`;
+}
+// no Mac o calendario flutua perto da data tocada; no celular (CSS) sobe de baixo
+function posicionarCalendario(){
+  const pop = document.querySelector('.cal-pop');
+  if(!pop || window.innerWidth <= 820) return;
+  const c = ui.cal;
+  const sel = c.tipo==='video'
+    ? `.cell-date[data-tipo="video"][data-row="${c.row}"]`
+    : `.cell-date[data-tipo="nota"][data-row="${c.row}"]`;
+  const alvo = document.querySelector(sel);
+  if(!alvo) return;
+  const r = alvo.getBoundingClientRect();
+  const w = pop.offsetWidth, h = pop.offsetHeight;
+  let top = r.bottom + 8;
+  if(top + h > window.innerHeight - 12) top = Math.max(12, r.top - h - 8);
+  const left = Math.min(Math.max(12, r.left + r.width/2 - w/2), window.innerWidth - w - 12);
+  pop.style.top = top + 'px';
+  pop.style.left = left + 'px';
 }
 
 function fecharPeriodoHtml(cid, ym, rows, total){
@@ -1568,9 +1636,11 @@ function render(){
     </div>`}
     ${ui.toast ? renderToast() : ''}
     ${ui.fecharJanela ? janelaFecharHtml() : ''}
+    ${ui.cal ? calendarioHtml() : ''}
   `;
   ui.screenAnim = false;
   attachHandlers();
+  posicionarCalendario();
   if(metaSel && ui.metaEditing){
     const metaIn = document.getElementById('meta-in');
     if(metaIn){ metaIn.focus(); try{ metaIn.setSelectionRange(metaSel[0], metaSel[1]); }catch(e){} }
@@ -1749,7 +1819,7 @@ function renderClientPanel(clientId){
     rowsHtml = `<div class="empty-hint">Nenhum ${isEsp?'lançamento':'vídeo'} em ${MES_NOME[view.month]} de ${view.year} ainda.</div>`;
   } else if(isEsp){
     rowsHtml = `<div class="esp-cards">`;
-    rows.forEach(r=>{
+    ordenar(rows).forEach(([r])=>{
       rowsHtml += `<div class="esp-card ${animateRows?'row-enter':''}" data-row="${r.id}">
         <textarea class="esp-textarea" rows="2" placeholder="Escreva aqui: cliente, o que foi feito, quantos vídeos etc."
           data-role="video-field" data-client="${clientId}" data-ym="${ym}" data-row="${r.id}" data-field="headline">${esc(r.headline)}</textarea>
@@ -1767,15 +1837,14 @@ function renderClientPanel(clientId){
         <th class="num">Nº</th><th>Vídeo</th><th>Cliente</th>
         <th class="data">Data</th><th class="valor">Valor</th><th class="acao"></th>
       </tr></thead><tbody>`;
-    rows.forEach((r,i)=>{
+    ordenar(rows).forEach(([r,i])=>{
       rowsHtml += `<tr data-row="${r.id}" class="${animateRows?'row-enter':''}">
         <td class="num">${i+1}</td>
         <td class="video"><input class="cell-input" type="text" value="${esc(r.headline)}"
           data-role="video-field" data-client="${clientId}" data-ym="${ym}" data-row="${r.id}" data-field="headline" placeholder="Nome do vídeo"></td>
         <td class="cliente"><input class="cell-input" type="text" value="${esc(r.subcliente)}"
           data-role="video-field" data-client="${clientId}" data-ym="${ym}" data-row="${r.id}" data-field="subcliente" placeholder="Cliente final"></td>
-        <td class="data"><input class="cell-input" type="date" value="${esc(r.data)}"
-          data-role="video-field" data-client="${clientId}" data-ym="${ym}" data-row="${r.id}" data-field="data"></td>
+        <td class="data">${botaoData(r.data, `data-tipo="video" data-client="${clientId}" data-ym="${ym}" data-row="${r.id}"`)}</td>
         <td class="valor"><div class="valor-wrap"><span class="valor-prefix">R$</span><input class="cell-input valor sensitive" type="text" inputmode="decimal" value="${esc(valorDisplay(r.valor))}"
           data-role="video-field" data-client="${clientId}" data-ym="${ym}" data-row="${r.id}" data-field="valor"></div></td>
         <td class="acao"><button class="icon-btn" title="Excluir vídeo" data-action="delete-video" data-client="${clientId}" data-ym="${ym}" data-row="${r.id}">✕</button></td>
@@ -1784,6 +1853,7 @@ function renderClientPanel(clientId){
     rowsHtml += `</tbody></table></div>`;
   }
 
+  const addBtn = `<button class="add-row-btn${ui.ordemDesc?' add-topo':''}" data-action="add-video" data-client="${clientId}" data-ym="${ym}">+ ${isEsp?'adicionar lançamento':'adicionar vídeo'}</button>`;
   return `
     <div class="panel-head">
       <div class="panel-title">${esc(c.nome)}${isEsp?' <span class="tipo-badge">esporádico</span>':''}</div>
@@ -1805,10 +1875,12 @@ function renderClientPanel(clientId){
     <div class="action-bar action-top">
       <button class="btn primary" data-action="gerar-pdf" data-client="${clientId}" data-ym="${ym}" ${rows.length===0?'disabled':''}>Gerar relatório PDF</button>
       ${fecharPeriodoHtml(clientId, ym, rows, total)}
+      ${rows.length>1 ? `<button type="button" class="ordem-btn${ui.ordemDesc?' desc':''}" data-action="virar-lista" aria-pressed="${ui.ordemDesc}"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 5v14M6 13l6 6 6-6"/></svg>${ui.ordemDesc?'Mais recentes primeiro':'Mais antigos primeiro'}</button>` : ''}
     </div>
+    ${ui.ordemDesc ? addBtn : ''}
     ${rowsHtml}
     <div class="table-foot">
-      <button class="add-row-btn" data-action="add-video" data-client="${clientId}" data-ym="${ym}">+ ${isEsp?'adicionar lançamento':'adicionar vídeo'}</button>
+      ${ui.ordemDesc ? '<span></span>' : addBtn}
       <div class="month-total">Total do período: <b class="sensitive">R$ ${fmtBRL(total)}</b></div>
     </div>
   `;
@@ -1840,8 +1912,7 @@ function renderFaturamento(){
       rowsHtml += `<tr class="${animateRows?'row-enter':''}">
         <td><input class="cell-input" type="text" list="empresa-list" value="${esc(r.empresa)}"
           data-role="nota-field" data-year="${year}" data-row="${r.id}" data-field="empresa"></td>
-        <td><input class="cell-input" type="date" value="${esc(r.data||'')}"
-          data-role="nota-field" data-year="${year}" data-row="${r.id}" data-field="data"></td>
+        <td>${botaoData(r.data, `data-tipo="nota" data-year="${year}" data-row="${r.id}"`)}</td>
         <td><div class="valor-wrap"><span class="valor-prefix">R$</span><input class="cell-input valor sensitive" type="text" inputmode="decimal" value="${esc(valorDisplay(r.valor))}"
           data-role="nota-field" data-year="${year}" data-row="${r.id}" data-field="valor"></div></td>
         <td class="acao"><button class="icon-btn" title="Excluir nota" data-action="delete-nota" data-year="${year}" data-row="${r.id}">✕</button></td>
@@ -2342,6 +2413,37 @@ function onAppClickInner(e){
     ui.fecharJanela = {cid: btn.dataset.client, ym: btn.dataset.ym, etapa: 'dados'};
     render();
   }
+  else if(action==='virar-lista'){
+    ui.ordemDesc = !ui.ordemDesc;
+    lsSet(LS.ordem, ui.ordemDesc ? 'desc' : 'asc');
+    render();
+  }
+  else if(action==='abrir-cal'){
+    const d = btn.dataset;
+    ui.cal = {tipo: d.tipo, client: d.client, ym: d.ym, year: d.year, row: d.row, mes: ''};
+    const linha = calLinha();
+    if(!linha){ ui.cal = null; return; }
+    ui.cal.mes = (linha.data || TODAY_ISO).slice(0,7);
+    render();
+  }
+  else if(action==='cal-mes'){
+    if(!ui.cal) return;
+    ui.cal.mes = shiftYm(ui.cal.mes, Number(btn.dataset.dir));
+    render();
+  }
+  else if(action==='cal-fechar'){
+    ui.cal = null;
+    render();
+  }
+  else if(action==='cal-dia' || action==='cal-limpar'){
+    const linha = calLinha();
+    if(linha){
+      linha.data = action==='cal-limpar' ? null : btn.dataset.dia;
+      persist();
+    }
+    ui.cal = null;
+    render();
+  }
   else if(action==='fechar-janela'){
     ui.fecharJanela = null;
     render();
@@ -2582,6 +2684,7 @@ function onImportFile(e){
 /* ---------------- PDF report ---------------- */
 // Esc fecha a janela de fechar periodo
 document.addEventListener('keydown', e=>{
+  if(e.key==='Escape' && ui.cal){ ui.cal = null; render(); return; }
   if(e.key==='Escape' && ui.fecharJanela){ ui.fecharJanela = null; render(); }
 });
 
