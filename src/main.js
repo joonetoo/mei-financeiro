@@ -1045,6 +1045,25 @@ function periodoStatusHtml(cid, ym, total){
   return '';
 }
 
+/* ---------------- aparencia: claro / escuro / automatico (2026-09-29) ---------------- */
+// so tela, guardado no aparelho (localStorage). O index.html aplica antes de desenhar.
+const TEMA_KEY = 'ritmo-tema';
+function temaAtual(){ const t = lsGet(TEMA_KEY); return t==='claro' || t==='escuro' ? t : 'auto'; }
+const escuroSistema = window.matchMedia ? window.matchMedia('(prefers-color-scheme: dark)') : null;
+function aplicarTema(){
+  const t = temaAtual();
+  const escuro = t==='escuro' || (t==='auto' && !!(escuroSistema && escuroSistema.matches));
+  document.documentElement.classList.toggle('escuro', escuro);
+  const meta = document.querySelector('meta[name="theme-color"]');
+  if(meta) meta.content = escuro ? '#171B14' : '#E8E1D0';
+}
+if(escuroSistema){
+  const mudou = ()=>{ if(temaAtual()==='auto') aplicarTema(); };
+  if(escuroSistema.addEventListener) escuroSistema.addEventListener('change', mudou);
+  else if(escuroSistema.addListener) escuroSistema.addListener(mudou);
+}
+aplicarTema();
+
 /* ---------------- lista virada + calendario (2026-09-29) ---------------- */
 // devolve [linha, indice guardado] na ordem da tela; a ordem salva nunca muda
 function ordenar(rows){
@@ -2016,6 +2035,17 @@ function renderConfig(){
       </div>`;
     }).join('')}</div>
 
+    <div class="section-title">Aparência</div>
+    <div class="tema-seg" role="group" aria-label="Aparência">
+      ${[['claro','Claro','<circle cx="12" cy="12" r="4.5"/><path d="M12 2v2.5M12 19.5V22M2 12h2.5M19.5 12H22M4.9 4.9l1.8 1.8M17.3 17.3l1.8 1.8M4.9 19.1l1.8-1.8M17.3 6.7l1.8-1.8"/>'],
+         ['escuro','Escuro','<path d="M20 14.5A8 8 0 1 1 9.5 4a6.5 6.5 0 0 0 10.5 10.5z"/>'],
+         ['auto','Automático','<circle cx="12" cy="12" r="8.5"/><path d="M12 3.5v17A8.5 8.5 0 0 0 12 3.5z" fill="currentColor"/>']]
+        .map(([v,t,p])=>`<button type="button" class="${temaAtual()===v?'on':''}" data-action="set-tema" data-tema="${v}" aria-pressed="${temaAtual()===v}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${p}</svg>${t}</button>`).join('')}
+    </div>
+    <p style="color:var(--ink-soft);font-size:13px;max-width:60ch;margin:0 0 6px;">
+      Automático segue o Mac e o celular: escuro quando o aparelho está no modo escuro. Fica guardado em cada aparelho e não mexe nos seus dados.
+    </p>
+
     <div class="section-title">CNPJ dos clientes</div>
     <p style="color:var(--ink-soft);font-size:13px;max-width:60ch;margin:0 0 6px;">
       Só pra você copiar e colar no site da Receita na hora de emitir a nota. Fica guardado junto com o cadastro do cliente.
@@ -2411,6 +2441,11 @@ function onAppClickInner(e){
   else if(action==='fechar-periodo'){
     if(periodoFechado(btn.dataset.client, btn.dataset.ym)) return;
     ui.fecharJanela = {cid: btn.dataset.client, ym: btn.dataset.ym, etapa: 'dados'};
+    render();
+  }
+  else if(action==='set-tema'){
+    lsSet(TEMA_KEY, btn.dataset.tema);
+    aplicarTema();
     render();
   }
   else if(action==='virar-lista'){
