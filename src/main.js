@@ -2952,6 +2952,10 @@ function orcEditorHtml(o){
       <button type="button" class="oc-voltar" data-action="orc-voltar">‹ Orçamentos</button>
       <div class="oc-num"><b>${esc(o.numero)}</b><span>${ddmm(o.data)}</span></div>
       ${orcSegStatus(o.status)}
+      <div class="oc-topo-acoes">
+        ${o.status!=='aprovado' ? `<button type="button" class="btn gold" data-action="orc-aprovar">Aprovado: criar aba do cliente</button>` : ''}
+        <button type="button" class="btn ${armed?'danger-step confirming':'danger-step'}" data-action="orc-excluir">${armed?'Toque de novo pra excluir':'Excluir'}</button>
+      </div>
     </div>
 
     <div class="lc-card oc-calc">
@@ -3005,8 +3009,6 @@ function orcEditorHtml(o){
 
     <div class="oc-acoes">
       <button type="button" class="btn primary" data-action="orc-pdf">Baixar PDF</button>
-      ${o.status!=='aprovado' ? `<button type="button" class="btn gold" data-action="orc-aprovar">Aprovado: criar aba do cliente</button>` : ''}
-      <button type="button" class="btn ${armed?'danger-step confirming':'danger-step'}" data-action="orc-excluir">${armed?'Toque de novo pra excluir':'Excluir'}</button>
     </div>
    </div>
    <div class="oc-prev-col"><div class="oc-prev-rot">Prévia do PDF</div><div class="oc-folha" id="oc-folha">${orcFolhaHtml(o)}</div></div>
