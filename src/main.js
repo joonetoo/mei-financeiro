@@ -2893,7 +2893,7 @@ function esqueletoHtml(){
   const nav = (ic, t, on) => `<span class="${on?'on':''}">${ic}<span>${t}</span></span>`;
   return `<div class="off-app" aria-hidden="true">
     <div class="off-topo">
-      <div><div class="ritmo-marca">${RITMO_ICONE_ANIM}<span class="wm">ritmo<i>.</i></span></div>${sk('min(320px,70vw)', 30, 'margin-top:6px')}</div>
+      <div class="off-marca"><span class="off-mic">${RITMO_ICONE_ANIM}</span><div><span class="tr-wm">ritmo<i>.</i></span><span class="tr-slo">sua produção, no ritmo certo</span></div></div>
       <div class="off-nav">${nav(iconChart(), 'Painel', true)}${nav(iconList(), 'Lançamentos')}${nav(iconDoc(15), 'Notas emitidas')}${nav(iconGear(15), 'Configurações')}</div>
     </div>
     <div class="off-grade">${cartao('Faturado no ano')}${cartao('Limite MEI')}${cartao('Meta do mês')}</div>
