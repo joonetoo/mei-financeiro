@@ -134,7 +134,7 @@ em cada cliente e tudo junto lá em cima"*.
     só tela, `ui.semanasYm`, não é salvo), linha dourada da média sem texto (legenda em "média por semana").
   - Ordem desde 2026-09-29: ... Hoje + Esta semana → **Semana a semana** → dia a dia do mês + por cliente → notas por mês + últimos vídeos. "A cobrar" com mais de 3 clientes vira fila que desliza de lado (`.cob-row.rola`).
   - Notas por mês (com linha de limite/12) e últimos vídeos.
-- **Lançamentos** — barra lateral de clientes + painéis: vídeos por mês, "Notas emitidas", Configurações.
+- **Lançamentos** — barra lateral de clientes + painéis: vídeos por mês, "Notas emitidas", Configurações. Desde 2026-09-29 a aba do cliente é em cartões (opção B, mockup https://claude.ai/artifact/Wzamz5hkZxDc7AmcCQE7UU): cabeçalho com ano grande, 3 cartões de número, meses em minigráfico (`.months.lc-bars`), cartão da lista. Aparelhos do Joel: MacBook Pro 14" M1 Pro (testar em 1512×982) e Galaxy A56 (384×832).
   Alternância por pílula (`ui.screen` = `'painel' | 'lanc'`).
 
 **Meta mensal:** `state.metas = {"AAAA-MM": valor}`; mês sem meta herda a anterior; 0 = sem meta.

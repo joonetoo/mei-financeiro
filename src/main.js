@@ -1671,7 +1671,7 @@ function render(){
     ${painel ? renderPainel() : `
     <div class="layout${ui.screenAnim ? ' screen-in' : ''}">
       ${secao==='lanc' ? renderRail() : ''}
-      <div class="main">${renderMain()}</div>
+      <div class="main${secao==='lanc' ? ' main-lc' : ''}">${renderMain()}</div>
     </div>`}
     ${ui.toast ? renderToast() : ''}
     ${ui.fecharJanela ? janelaFecharHtml() : ''}
@@ -1836,16 +1836,22 @@ function renderClientPanel(clientId){
   const rows = videosDe(clientId, ym);
   const total = monthTotal(clientId, ym);
 
-  let monthsHtml = '<div class="months"><div class="month-slide-pill"></div>';
-  MESES.forEach(m=>{
+  // meses em minigrafico (2026-09-29, opcao B): altura = quanto faturou no mes
+  const totaisMes = MESES.map(m=>monthTotal(clientId, monthKey(view.year, m.k)));
+  const maiorMes = Math.max(...totaisMes, 0);
+  let monthsHtml = '<div class="months lc-bars"><div class="month-slide-pill"></div>';
+  MESES.forEach((m, mi)=>{
     const k = monthKey(view.year, m.k);
     const has = (state.videos[clientId] && state.videos[clientId][k] && state.videos[clientId][k].length>0);
     const active = m.k===view.month;
     const fechado = periodoFechado(clientId, k);
     const aberto = !fechado && k===periodoAberto(clientId);
+    const v = totaisMes[mi];
+    const alt = v>0 && maiorMes>0 ? Math.max(8, Math.round(v/maiorMes*100)) : 0;
+    const dica = `${m.nome}: R$ ${fmtBRL(v)}${has?` · ${state.videos[clientId][k].length} lançamentos`:''}${fechado?' · período fechado':aberto?' · período aberto':''}`;
     monthsHtml += `<button class="month-pill ${active?'active':''} ${has?'has-data':''} ${fechado?'closed':''} ${aberto?'open-p':''}"
-      data-action="switch-month" data-client="${clientId}" data-month="${m.k}" ${fechado?'title="período fechado"':aberto?'title="período aberto"':''}>
-      ${m.nome.slice(0,3)}${has?`<span class="count">${state.videos[clientId][k].length}</span>`:''}
+      data-action="switch-month" data-client="${clientId}" data-month="${m.k}" title="${dica}" aria-label="${dica}">
+      <span class="lc-col"><span class="lc-bar" style="height:${alt}%"></span></span><span class="lc-m">${m.nome.slice(0,3)}</span>
     </button>`;
   });
   monthsHtml += '</div>';
@@ -1893,34 +1899,43 @@ function renderClientPanel(clientId){
   }
 
   const addBtn = `<button class="add-row-btn${ui.ordemDesc?' add-topo':''}" data-action="add-video" data-client="${clientId}" data-ym="${ym}">+ ${isEsp?'adicionar lançamento':'adicionar vídeo'}</button>`;
+  const desdeP = inicioPeriodo(clientId, ym);
+  const mesNome = MES_NOME[view.month];
   return `
-    <div class="panel-head">
-      <div class="panel-title">${esc(c.nome)}${isEsp?' <span class="tipo-badge">esporádico</span>':''}</div>
-      <div class="panel-head-right">
-        <div class="mini-stats">
-          <div class="mini-stat"><div class="v sensitive">R$ ${fmtBRL(total)}</div><div class="l">neste período</div></div>
-          <div class="mini-stat"><div class="v sensitive">R$ ${fmtBRL(clientYearTotal(clientId, view.year))}</div><div class="l">no ano</div></div>
-          <div class="mini-stat"><div class="v">${rows.length}</div><div class="l">lançamentos</div></div>
-        </div>
-        <div class="year-switch">
-          <button data-action="year-step" data-client="${clientId}" data-dir="-1">‹</button>
+    <div class="lc-card lc-head">
+      <div class="lc-cli">
+        <span class="lc-chip ${chipClass(clientId)}">${esc(initials(c.nome))}</span>
+        <div class="lc-nome"><div class="panel-title">${esc(c.nome)}${isEsp?' <span class="tipo-badge">esporádico</span>':''}</div></div>
+        <div class="year-switch lc-ano">
+          <button data-action="year-step" data-client="${clientId}" data-dir="-1" aria-label="Ano anterior">‹</button>
           <span>${view.year}</span>
-          <button data-action="year-step" data-client="${clientId}" data-dir="1">›</button>
+          <button data-action="year-step" data-client="${clientId}" data-dir="1" aria-label="Próximo ano">›</button>
         </div>
       </div>
+      ${periodoStatusHtml(clientId, ym, total)}
     </div>
-    ${monthsHtml}
-    ${periodoStatusHtml(clientId, ym, total)}
-    <div class="action-bar action-top">
-      <button class="btn primary" data-action="gerar-pdf" data-client="${clientId}" data-ym="${ym}" ${rows.length===0?'disabled':''}>Gerar relatório PDF</button>
-      ${fecharPeriodoHtml(clientId, ym, rows, total)}
-      ${rows.length>1 ? `<button type="button" class="ordem-btn${ui.ordemDesc?' desc':''}" data-action="virar-lista" aria-pressed="${ui.ordemDesc}"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 5v14M6 13l6 6 6-6"/></svg>${ui.ordemDesc?'Mais recentes primeiro':'Mais antigos primeiro'}</button>` : ''}
+    <div class="lc-stats">
+      <div class="lc-st lc-st-g"><small>Neste período</small><b class="sensitive">R$ ${fmtBRL(total)}</b><span>${mesNome}${desdeP ? ` · desde ${ddmm(desdeP)}` : ''}</span></div>
+      <div class="lc-st lc-st-l"><small>No ano</small><b class="sensitive">R$ ${fmtBRL(clientYearTotal(clientId, view.year))}</b><span>${view.year}</span></div>
+      <div class="lc-st lc-st-s"><small>Lançamentos</small><b>${rows.length}</b><span>${isEsp?'no período':'vídeos no período'}</span></div>
     </div>
-    ${ui.ordemDesc ? addBtn : ''}
-    ${rowsHtml}
-    <div class="table-foot">
-      ${ui.ordemDesc ? '<span></span>' : addBtn}
-      <div class="month-total">Total do período: <b class="sensitive">R$ ${fmtBRL(total)}</b></div>
+    <div class="lc-card lc-meses">
+      <div class="lc-mh"><small>Meses de ${view.year}</small><span>altura = quanto faturou</span></div>
+      ${monthsHtml}
+    </div>
+    <div class="lc-card lc-lista">
+      <div class="lc-mh"><small>${isEsp?'Lançamentos':'Vídeos'} de ${mesNome.toLowerCase()}</small><span>total <b class="sensitive">R$ ${fmtBRL(total)}</b></span></div>
+      <div class="action-bar action-top">
+        <button class="btn primary" data-action="gerar-pdf" data-client="${clientId}" data-ym="${ym}" ${rows.length===0?'disabled':''}>Gerar relatório PDF</button>
+        ${fecharPeriodoHtml(clientId, ym, rows, total)}
+        ${rows.length>1 ? `<button type="button" class="ordem-btn${ui.ordemDesc?' desc':''}" data-action="virar-lista" aria-pressed="${ui.ordemDesc}"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 5v14M6 13l6 6 6-6"/></svg>${ui.ordemDesc?'Mais recentes primeiro':'Mais antigos primeiro'}</button>` : ''}
+      </div>
+      ${ui.ordemDesc ? addBtn : ''}
+      ${rowsHtml}
+      <div class="table-foot">
+        ${ui.ordemDesc ? '<span></span>' : addBtn}
+        <div class="month-total">Total do período: <b class="sensitive">R$ ${fmtBRL(total)}</b></div>
+      </div>
     </div>
   `;
 }

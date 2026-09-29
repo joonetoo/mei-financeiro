@@ -1458,6 +1458,96 @@ html.escuro .tr-oi em{color:#D9AE55;}
   .topbar.tr{padding:34px 2px 18px;}
   .topbar.tr .screen-nav{margin:0;}
 }
+
+/* ================================================================
+   LANCAMENTOS EM CARTOES (2026-09-29, opcao B do mockup
+   https://claude.ai/artifact/Wzamz5hkZxDc7AmcCQE7UU)
+   O .main vira so um trilho; cada bloco e um cartao como no Painel.
+   ================================================================ */
+.main.main-lc{background:none !important;border:0 !important;box-shadow:none !important;padding:0 !important;
+  -webkit-backdrop-filter:none !important;backdrop-filter:none !important;display:flex;flex-direction:column;gap:14px;border-radius:0 !important;}
+.lc-card{background:var(--surface);border-radius:24px;padding:18px 20px;border:1px solid rgba(255,255,255,.6);
+  box-shadow:0 1px 0 rgba(255,255,255,.9) inset,0 16px 32px -22px rgba(34,30,25,.45);min-width:0;}
+.lc-head{display:flex;flex-direction:column;gap:10px;}
+.lc-cli{display:flex;align-items:center;gap:14px;min-width:0;}
+.lc-chip{width:48px;height:48px;border-radius:15px;display:grid;place-items:center;font-size:14px;font-weight:800;flex:0 0 auto;background:rgba(34,30,25,.08);color:var(--ink-soft);}
+.lc-chip.chip-0{background:var(--chip-0);color:var(--chip-0-ink);}
+.lc-chip.chip-1{background:var(--chip-1);color:var(--chip-1-ink);}
+.lc-chip.chip-2{background:var(--chip-2);color:var(--chip-2-ink);}
+.lc-nome{flex:1 1 auto;min-width:0;}
+.lc-nome .panel-title{font-size:24px;line-height:1.15;}
+.lc-head .periodo-info,.lc-head .periodo-banner{margin:0;}
+.year-switch.lc-ano{display:flex;align-items:center;gap:4px;background:var(--bg);border-radius:16px;padding:4px;flex:0 0 auto;}
+.year-switch.lc-ano button{width:42px;height:42px;border-radius:12px;background:var(--surface);color:var(--ink);font-size:20px;font-weight:600;box-shadow:0 1px 2px rgba(34,30,25,.12);}
+.year-switch.lc-ano button:hover{background:var(--surface-wash);}
+.year-switch.lc-ano span{font-size:20px;font-weight:800;padding:0 12px;font-variant-numeric:tabular-nums;color:var(--ink);min-width:0;}
+.lc-stats{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px;}
+.lc-st{border-radius:22px;padding:16px 18px;display:flex;flex-direction:column;gap:4px;min-width:0;
+  box-shadow:0 1px 0 rgba(255,255,255,.7) inset,0 16px 32px -22px rgba(34,30,25,.45);}
+.lc-st small{font-size:10.5px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;opacity:.8;}
+.lc-st b{font-size:28px;font-weight:800;letter-spacing:-.02em;font-variant-numeric:tabular-nums;white-space:nowrap;line-height:1.1;}
+.lc-st span{font-size:12.5px;opacity:.85;}
+.lc-st-g{background:var(--gold-wash);color:var(--gold-deep);}
+.lc-st-l{background:var(--lavender-wash);color:var(--lavender-deep);}
+.lc-st-s{background:var(--sage-wash);color:var(--sage-deep);}
+.lc-mh{display:flex;justify-content:space-between;align-items:baseline;gap:10px;margin-bottom:12px;flex-wrap:wrap;}
+.lc-mh small{font-size:10.5px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:var(--ink-faint);}
+.lc-mh span{font-size:12.5px;color:var(--ink-faint);}
+.lc-mh span b{color:var(--ink);}
+/* meses em minigrafico */
+.months.lc-bars{display:grid;grid-template-columns:repeat(12,minmax(0,1fr));gap:8px;align-items:end;width:auto;max-width:none;
+  background:none;border:0;border-radius:0;padding:0;margin:0;overflow:visible;}
+.months.lc-bars .month-slide-pill{display:none;}
+.months.lc-bars .month-pill{display:flex;flex-direction:column;align-items:center;gap:6px;padding:0;min-height:0;border-radius:0;background:none;color:var(--ink-soft);}
+.months.lc-bars .month-pill::after{display:none;}
+.lc-col{height:74px;width:100%;display:flex;align-items:flex-end;justify-content:center;background:var(--bg);border-radius:12px;padding:5px;box-sizing:border-box;transition:background var(--dur-base) var(--ease);}
+.lc-bar{display:block;width:100%;border-radius:8px;background:rgba(95,114,72,.42);transition:height .5s var(--ease);}
+.month-pill:hover .lc-col{background:rgba(34,30,25,.08);}
+.lc-m{font-size:12.5px;font-weight:600;}
+.month-pill.active .lc-col{background:#2E3925;box-shadow:0 8px 16px -10px rgba(34,30,25,.7);}
+.month-pill.active .lc-bar{background:#E2B659;}
+.month-pill.active .lc-m{color:var(--ink);font-weight:800;}
+.month-pill.open-p .lc-m::after{content:"";display:inline-block;width:5px;height:5px;border-radius:50%;background:#B98A2B;margin-left:4px;vertical-align:2px;}
+.month-pill.closed .lc-m::after{content:"✓";font-size:10px;color:var(--sage);margin-left:3px;}
+.lc-lista .action-top{margin:0 0 12px;}
+.lc-lista .table-foot{padding-top:12px;}
+@media (min-width:821px){
+  .lc-card{background:linear-gradient(180deg, rgba(255,255,255,.55), rgba(255,255,255,.18) 38%, rgba(255,255,255,.10)), rgba(251,248,241,.62);
+    -webkit-backdrop-filter:blur(30px) saturate(1.6);backdrop-filter:blur(30px) saturate(1.6);border:1px solid rgba(255,255,255,.75);
+    box-shadow:inset 0 1px 0 rgba(255,255,255,.95), inset 0 -1px 0 rgba(255,255,255,.35), 0 22px 44px -26px rgba(34,30,25,.45);}
+  .lc-lista .table-wrap{background:rgba(255,255,255,.35);}
+}
+@media (max-width:820px){
+  .main.main-lc{gap:10px;}
+  .lc-card{padding:16px;border-radius:26px;border:0;box-shadow:0 1px 2px rgba(34,30,25,.08);}
+  .lc-st{box-shadow:0 1px 2px rgba(34,30,25,.08);border-radius:24px;}
+  .lc-stats{grid-template-columns:1fr 1fr;gap:10px;}
+  .lc-st-g{grid-column:span 2;}
+  .lc-st b{font-size:23px;}
+  .lc-cli{flex-wrap:wrap;}
+  .year-switch.lc-ano{flex:1 1 100%;justify-content:space-between;}
+  .year-switch.lc-ano button{width:52px;height:46px;}
+  .lc-nome .panel-title{font-size:22px;}
+  .months.lc-bars{display:flex;overflow-x:auto;gap:8px;padding:2px 2px 4px;scrollbar-width:none;}
+  .months.lc-bars .month-pill{flex:0 0 40px;min-height:0;}
+  .lc-col{height:64px;}
+}
+/* escuro */
+html.escuro .lc-card{border-color:rgba(236,230,214,.08);}
+html.escuro .lc-chip:not([class*="chip-"]){background:rgba(236,230,214,.1);}
+html.escuro .months.lc-bars .month-pill.active,.months.lc-bars .month-pill.active{background:none;color:var(--ink);}
+html.escuro .year-switch.lc-ano button{box-shadow:none;background:rgba(236,230,214,.1);}
+html.escuro .lc-st{box-shadow:0 1px 0 rgba(255,255,255,.05) inset,0 16px 32px -22px rgba(0,0,0,.7);}
+html.escuro .lc-bar{background:rgba(164,189,130,.5);}
+html.escuro .month-pill:hover .lc-col{background:rgba(236,230,214,.08);}
+html.escuro .month-pill.active .lc-col{background:#ECE6D6;}
+html.escuro .month-pill.active .lc-bar{background:#B98A2B;}
+@media (min-width:821px){
+  html.escuro .lc-card{background:linear-gradient(180deg, rgba(255,255,255,.06), rgba(255,255,255,.02) 40%), rgba(34,40,29,.78);
+    box-shadow:inset 0 1px 0 rgba(255,255,255,.07), 0 22px 44px -26px rgba(0,0,0,.7);}
+  html.escuro .lc-lista .table-wrap{background:rgba(0,0,0,.12);}
+}
+@media (max-width:820px){html.escuro .lc-card,html.escuro .lc-st{box-shadow:none;}}
 /* ================================================================
    MODO ESCURO "A — Oliva noturno" (escolhido em 2026-09-29)
    Mockup: https://claude.ai/artifact/EdgPMts5ujWy41pEAPsPR4
