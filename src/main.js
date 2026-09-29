@@ -2958,7 +2958,7 @@ async function boot(){
   if(recuperadas) showToast('Recuperei alterações que não tinham chegado na nuvem — já estou enviando.');
   if(dirty) flushSave();
   enviarHistorico();
-  // a fonte (Fraunces/Public Sans) pode chegar depois do primeiro desenho e
+  // a fonte (Manrope; Fraunces so no logo) pode chegar depois do primeiro desenho e
   // mudar a largura dos botoes — reposiciona as pilulas quando ela carregar
   if(document.fonts && document.fonts.ready){
     document.fonts.ready.then(()=>{ sliderGeom = {}; requestAnimationFrame(syncAllSliders); });
