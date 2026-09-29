@@ -1,12 +1,12 @@
-# App MEI — central do Joel
+# Ritmo (antigo App MEI) — central do Joel
 
-> **Sessão na nuvem:** este arquivo é uma cópia do `CLAUDE.md` da pasta "App MEI" do Mac. Aqui a pasta do código é a raiz do repositório.
+> **Sessão na nuvem:** este arquivo mora na raiz do repositório (a pasta do código).
 > Na nuvem NÃO publique (`npm run deploy`) e não escreva na linha real `jnf-financeiro-v1`: só mexa no código, teste na cópia `jnf-financeiro-teste`, faça commit num ramo e deixe a publicação pro Joel/Mac.
 
 
 Projeto do app **MEI**, que desde 2026-09-27 se chama **Ritmo** ("ritmo.", antes "Joel Neto Filmes — Controle Financeiro"). Qualquer conversa aberta aqui (no Mac ou pelo
-celular, via Remote Control) deve ler este arquivo antes de agir. O código **não mora aqui**: mora em
-`/Users/joelneto/Documents/CLAUDE/MEI`. Esta pasta só guarda o contexto e os atalhos.
+celular, via Remote Control) deve ler este arquivo antes de agir. O código mora nesta mesma pasta:
+`/Users/joelneto/Documents/CLAUDE/Ritmo - sua produção no ritmo certo` (até 2026-09-29 se chamava `CLAUDE/MEI`; a antiga pasta "App MEI", só de contexto, foi aposentada).
 
 > Em 2026-09-27 o app de finanças pessoais (antigo "Finanças da Casa", agora **Oink**) ganhou projeto próprio:
 > `/Users/joelneto/Documents/CLAUDE/Oink - suas contas sem susto` (com o código em `app/`). Nada do Oink fica aqui.
@@ -15,7 +15,7 @@ celular, via Remote Control) deve ler este arquivo antes de agir. O código **n�
 | | **MEI** |
 |---|---|
 | Pra que serve | Faturamento de edição de vídeo por cliente, notas, limite MEI |
-| Pasta do código | `/Users/joelneto/Documents/CLAUDE/MEI` |
+| Pasta do código | `/Users/joelneto/Documents/CLAUDE/Ritmo - sua produção no ritmo certo` |
 | Tecnologia | Vite + **JavaScript puro** (`src/main.js` ~2.000 linhas + CSS em `index.html`) |
 | Link do app | https://joonetoo.github.io/mei-financeiro/ |
 | Código no GitHub | github.com/joonetoo/mei-financeiro (público) |
@@ -104,7 +104,7 @@ celular, via Remote Control) deve ler este arquivo antes de agir. O código **n�
 
 **Se o Joel disser que os dados sumiram/zeraram:** não entrar em pânico nem assumir perda. Checar a
 linha real via REST do Supabase, as linhas `-backup-N`, e perguntar dos arquivos exportados
-(`backups MEI/` em `/Users/joelneto/Documents/CLAUDE/`). Mês "vazio" às vezes é só um mês ainda não preenchido.
+(`Ritmo - backups/` em `/Users/joelneto/Documents/CLAUDE/`, fora do repositório de propósito, porque o GitHub é público). Mês "vazio" às vezes é só um mês ainda não preenchido.
 
 
 ---
@@ -177,7 +177,7 @@ Obs.: diferente do Finanças, aqui o claro foi escolha dele — não "corrigir" 
 **Pegadinha de teste:** o `render()` recria a tela inteira a cada ação, então referências de elementos
 do navegador ficam velhas depois de qualquer clique — buscar de novo a cada passo.
 
-**Ícone:** `CLAUDE FINANÇAS/icone MEI.jpg`, cores e fundo originais, só com margem pra não cortar.
+**Ícone:** o original (`icone MEI.jpg`) não existe mais no Mac; o ícone atual é o SVG `RITMO_ICONE` em `src/main.js`.
 
 
 ---
@@ -185,7 +185,7 @@ do navegador ficam velhas depois de qualquer clique — buscar de novo a cada pa
 ## 4. Como fazer uma mudança (passo a passo)
 
 1. Entender o pedido; se for visual ou função nova → **mockup primeiro** e esperar aprovação.
-2. Editar o código em `/Users/joelneto/Documents/CLAUDE/MEI`.
+2. Editar o código em `/Users/joelneto/Documents/CLAUDE/Ritmo - sua produção no ritmo certo`.
 3. **Testar sem tocar nos dados reais:**
    - MEI: iniciar o servidor `mei-teste` (em `.claude/launch.json`) — usa a cópia `jnf-financeiro-teste`.
      Depois conferir que o build de produção tem **0** ocorrências de `jnf-financeiro-teste`.
@@ -198,7 +198,7 @@ do navegador ficam velhas depois de qualquer clique — buscar de novo a cada pa
 6. **Publicar:** `npm run deploy` na pasta do app. Às vezes a trava de segurança bloqueia publicar —
    aí entregar ao Joel o comando pronto pra colar no Terminal, por exemplo:
    ```bash
-   cd "/Users/joelneto/Documents/CLAUDE/MEI" && export PATH="$HOME/.local/bin:$PATH" && npm run deploy
+   cd "/Users/joelneto/Documents/CLAUDE/Ritmo - sua produção no ritmo certo" && export PATH="$HOME/.local/bin:$PATH" && npm run deploy
    ```
    O GitHub Pages demora ~1 min pra atualizar.
 7. Conferir no link real que carregou com os dados dele. Dizer que os dados não foram tocados.
@@ -265,6 +265,6 @@ _Quando o Joel trouxer uma ideia nova, anotar aqui antes de começar, e marcar q
   — especialmente `financas_casa_architecture.md` e `mei_financeiro_architecture.md`.
 - Skill de segurança de dados: `~/.claude/skills/zero-data-loss/SKILL.md`.
 - Conversas antigas fixadas no app: "App Finanças" e "App MEI".
-- Arquivos do Joel: `CLAUDE FINANÇAS/` (ícone do MEI), `backups MEI/` — em `/Users/joelneto/Documents/CLAUDE/`.
+- Arquivos do Joel: `Ritmo - backups/` em `/Users/joelneto/Documents/CLAUDE/`. As planilhas antigas (Fábio Ortiz, WAD, Wide Media, Notas emitidas) ficam no Google Drive; o PDF "MEUS DADOS DO MEI CASO PRECISE" está em `Documents/MEI, DOCUMENTOS E NOTAS/Documentos /`.
 - Projeto do Oink (app de finanças pessoais): `/Users/joelneto/Documents/CLAUDE/Oink - suas contas sem susto`.
 

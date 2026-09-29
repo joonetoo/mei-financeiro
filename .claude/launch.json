@@ -9,6 +9,15 @@
         "export PATH=\"/Users/joelneto/.nvm/versions/node/v24.21.0/bin:$PATH\" && VITE_STORAGE_KEY=jnf-financeiro-teste exec npx vite --port 5191 --strictPort"
       ],
       "port": 5191
+    },
+    {
+      "name": "mei-teste",
+      "runtimeExecutable": "/bin/bash",
+      "runtimeArgs": [
+        "-c",
+        "export PATH=\"/Users/joelneto/.nvm/versions/node/v24.21.0/bin:$PATH\" && VITE_STORAGE_KEY=jnf-financeiro-teste exec npx vite --port 5192 --strictPort"
+      ],
+      "port": 5192
     }
   ]
 }
