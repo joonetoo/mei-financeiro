@@ -214,6 +214,14 @@ privado — ele tentou tornar privado em 2026-09-13 e voltamos pra público; nen
 
 ## 5. Lições que custaram caro (não repetir)
 
+- **Publicar o que foi feito na nuvem (ramo `main-drgofb` ou outro):** entregar ao Joel um comando só, já na pasta nova:
+  ```bash
+  cd "/Users/joelneto/Documents/CLAUDE/Ritmo - sua produção no ritmo certo" && git add CLAUDE.md .claude/launch.json && git commit -m "Anotacoes do Mac" ; git checkout main && git pull origin main && git fetch origin && git merge -X ours origin/<ramo> -m "Junta as mudancas" && git push origin main && export PATH="$HOME/.local/bin:$PATH" && npm run deploy
+  ```
+  (2026-09-29) Travou duas vezes: `index.lock` esquecido depois da mudança de pasta (conferir `pgrep -x git` e só então `rm -f .git/index.lock`)
+  e `CLAUDE.md` alterado nos dois lados (Mac e nuvem) — guardar primeiro o do Mac num commit e juntar com `-X ours`
+  (em conflito fica o do Mac; o código não conflita). Depois conferir no site que a versão nova subiu.
+
 - Hospedar app com Supabase como Artifact do Claude → falha silenciosa. Usar GitHub Pages.
 - Tratar "falha de rede" igual a "banco vazio" → apagou dados reais. Ver §3.
 - Testar exclusão em dado real → apagou um lançamento de verdade.
@@ -262,6 +270,7 @@ _Quando o Joel trouxer uma ideia nova, anotar aqui antes de começar, e marcar q
 ## 7. Onde mais tem informação
 
 - Memória do Claude (mais detalhada, com código): `~/.claude/projects/-Users-joelneto-Documents-CLAUDE-PASTA-CODE/memory/`
+  (depois da reorganização de 2026-09-28 a memória de uma conversa aberta na pasta nova fica em `~/.claude/projects/` numa pasta com o nome do caminho novo; se não achar lá, procurar na antiga)
   — especialmente `financas_casa_architecture.md` e `mei_financeiro_architecture.md`.
 - Skill de segurança de dados: `~/.claude/skills/zero-data-loss/SKILL.md`.
 - Conversas antigas fixadas no app: "App Finanças" e "App MEI".
