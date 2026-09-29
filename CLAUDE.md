@@ -262,6 +262,8 @@ privado — ele tentou tornar privado em 2026-09-13 e voltamos pra público; nen
       (ícone A creme, fonte Fraunces + Public Sans, sem timecode); 4) virada no mesmo link: juntar `beta` no
       `main`, `npm run deploy`, conferir a linha real antes/depois; beta aposentado só quando o Joel pedir.
 
+- [ ] **Aba Orçamentos + calculadora "Quanto cobrar?" (ideia de 2026-09-29, mockup https://claude.ai/artifact/RA5LryQDxU3TWvUWSSrNZw — esperando aprovação).** Calculadora parte do valor da hora (meta do mês ÷ horas/mês), soma dificuldade, prazo, extras e desconto de volume; 3 faixas (mínimo/justo/com folga) + o que ele cobra hoje. Orçamento com itens (qtd × valor), total automático ou manual, texto pronto, prazo, validade, PDF com a identidade (sem Pix), histórico com status e "aprovado → vira aba esporádica". Dados novos só acrescentando (`state.orcamentos`).
+
 _Quando o Joel trouxer uma ideia nova, anotar aqui antes de começar, e marcar quando publicar._
 
 
