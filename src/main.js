@@ -1980,11 +1980,13 @@ function renderFaturamento(){
   return `
     <div class="panel-head">
       <div class="panel-title">Notas emitidas</div>
-      <div class="year-switch">
-        <button data-action="fat-year-step" data-dir="-1">‹</button>
-        <span>${year}</span>
-        <button data-action="fat-year-step" data-dir="1">›</button>
-        <button class="btn small" style="margin-left:8px;" data-action="fat-add-year">+ novo ano</button>
+      <div class="nt-anos">
+        <div class="year-switch lc-ano">
+          <button data-action="fat-year-step" data-dir="-1" aria-label="Ano anterior">‹</button>
+          <span>${year}</span>
+          <button data-action="fat-year-step" data-dir="1" aria-label="Próximo ano">›</button>
+        </div>
+        <button type="button" class="nt-novo" data-action="fat-add-year"><span aria-hidden="true">+</span> Novo ano</button>
       </div>
     </div>
 
