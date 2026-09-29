@@ -1019,7 +1019,7 @@ function painelCobrar(){
   }).join('');
   const emAberto = state.clientOrder.reduce((s,id)=> s + (clientById(id) ? monthTotal(id, periodoAberto(id)) : 0), 0);
   return `<div class="sec-head"><h2>A cobrar${novoTag()}</h2><span class="sub">em aberto: <b class="sensitive">R$ ${fmtBRL(emAberto)}</b> · toque num cliente pra abrir</span></div>
-    <div class="cob-row">${cards}</div>`;
+    <div class="cob-row${state.clientOrder.length>3?' rola':''}">${cards}</div>`;
 }
 
 // bloco do período na aba do cliente: status + botão de fechar (com confirmação)
@@ -1600,9 +1600,9 @@ function renderPainel(){
     ${painelCobrar()}
     ${painelHoje(porData)}
     ${painelSemana(porData)}
+    ${painelSemanas(porData)}
     ${painelDiaADia(porData, ym)}
     ${painelClientes(ym)}
-    ${painelSemanas(porData)}
     ${painelNotas()}
     ${painelRecentes()}
   </div>`;

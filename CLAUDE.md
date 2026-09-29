@@ -132,6 +132,7 @@ em cada cliente e tudo junto lá em cima"*.
     total de cada semana do mês (seg→dom, cortada na virada do mês, pela data do vídeo), setas ‹ › pra
     trocar de mês (volta até o mês mais antigo com aba de cliente, não passa do mês atual; mês escolhido é
     só tela, `ui.semanasYm`, não é salvo), linha dourada da média sem texto (legenda em "média por semana").
+  - Ordem desde 2026-09-29: ... Hoje + Esta semana → **Semana a semana** → dia a dia do mês + por cliente → notas por mês + últimos vídeos. "A cobrar" com mais de 3 clientes vira fila que desliza de lado (`.cob-row.rola`).
   - Notas por mês (com linha de limite/12) e últimos vídeos.
 - **Lançamentos** — barra lateral de clientes + painéis: vídeos por mês, "Notas emitidas", Configurações.
   Alternância por pílula (`ui.screen` = `'painel' | 'lanc'`).
