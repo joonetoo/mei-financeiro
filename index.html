@@ -17,7 +17,7 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
 <meta name="apple-mobile-web-app-title" content="Ritmo">
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,700&family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Urbanist:wght@800&family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js"></script>
 <style>
@@ -1118,7 +1118,7 @@ body{overflow-x:hidden;}
    função muda. Mockup: https://claude.ai/artifact/HEgsUbmUk8Z3prWw82hCmM
    ================================================================ */
 :root{
-  --fonte-logo:'Fraunces',Georgia,serif; /* so a marca "ritmo." e a saudacao do topo */
+  --fonte-logo:'Urbanist',system-ui,sans-serif; /* so a marca "ritmo." e a saudacao do topo */
   --bg:#E8E1D0; --surface:#FBF8F1; --surface-wash:#F3EEE2;
   --ink:#211D18; --ink-soft:#554E40; --ink-faint:#6A6356;
   --hairline:rgba(34,30,25,0.10); --hairline-strong:rgba(34,30,25,0.20);
@@ -1137,7 +1137,7 @@ body{overflow-x:hidden;}
 /* marca no topo + faixa do beta */
 .ritmo-marca{display:flex;align-items:center;gap:8px;margin-bottom:6px;}
 .ritmo-marca>svg{width:28px;height:28px;display:block;flex:0 0 auto;}
-.ritmo-marca .wm{font-family:var(--fonte-logo);font-weight:700;font-size:19px;letter-spacing:-.02em;line-height:1;color:var(--ink);}
+.ritmo-marca .wm{font-family:var(--fonte-logo);font-weight:800;font-size:19px;letter-spacing:-.035em;line-height:1;color:var(--ink);}
 .ritmo-marca .wm i{font-style:normal;color:#B98A2B;}
 /* notinha imprimindo + check (so no icone animado) */
 @keyframes rn-print{0%{transform:translateY(-70px)}25%{transform:translateY(-52px)}34%{transform:translateY(-52px)}60%{transform:translateY(-24px)}68%{transform:translateY(-24px)}100%{transform:translateY(0)}}
@@ -1416,11 +1416,11 @@ body{overflow-x:hidden;}
   column-gap:20px;row-gap:0;align-items:end;padding:6px 2px 22px;}
 .tr-ic{grid-area:ic;align-self:center;display:block;width:104px;height:104px;margin:-10px 0;}
 .tr-ic svg{width:100%;height:100%;display:block;}
-.tr-wm{grid-area:wm;font-family:var(--fonte-logo);font-weight:700;font-size:58px;letter-spacing:-.03em;line-height:.95;color:var(--ink);}
+.tr-wm{grid-area:wm;font-family:var(--fonte-logo);font-weight:800;font-size:58px;letter-spacing:-.035em;line-height:.95;color:var(--ink);}
 .tr-wm i{font-style:normal;color:#B98A2B;}
 html.escuro .tr-wm i{color:#D9AE55;}
 .tr-slo{grid-area:slo;font-size:15px;color:var(--ink-soft);align-self:start;margin-top:4px;}
-.tr-oi{grid-area:oi;justify-self:end;font-family:var(--fonte-logo);font-weight:700;font-size:38px;letter-spacing:-.02em;line-height:1;color:var(--ink);padding-bottom:4px;text-align:right;}
+.tr-oi{grid-area:oi;justify-self:end;font-family:var(--fonte-logo);font-weight:800;font-size:38px;letter-spacing:-.035em;line-height:1;color:var(--ink);padding-bottom:4px;text-align:right;}
 .tr-oi em{font-style:normal;color:#B98A2B;}
 html.escuro .tr-oi em{color:#D9AE55;}
 .tr-dt{grid-area:dt;justify-self:end;align-self:start;font-size:15px;color:var(--ink-soft);margin-top:4px;white-space:nowrap;}
