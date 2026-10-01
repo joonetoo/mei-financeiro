@@ -812,6 +812,8 @@ let ui = {
   screen: 'painel', // 'painel' (so leitura: graficos, meta) | 'lanc' (abas, tabelas, config)
   screenAnim: false, // true so no render logo apos trocar de tela
   metaEditing: false,
+  metaYm: null, // mes do cartao da meta e do "Por cliente" (null = mes atual) — so tela, nao e salvo
+  metaEditYm: null, // mes da meta que esta sendo editada
   metaDraft: '', // texto sendo digitado na meta — sobrevive a um render() no meio da digitacao
   metaFocus: false,
   orcId: null, // orcamento aberto na aba Orcamentos (null = lista) — so tela
@@ -974,20 +976,46 @@ function nomeMesYm(ym, comAno){
   return MES_NOME[m].toLowerCase() + (comAno || y!==REAL_YEAR ? ` de ${y}` : '');
 }
 
-// produção por data do vídeo (a meta e o "por cliente" do Painel contam assim:
-// fechar um cliente mais cedo ou mais tarde não mexe na meta)
+// produção do mês pela ABA em que o vídeo foi lançado (pedido do Joel em
+// 2026-10-01): cada aba de mês do cliente é o período de cobrança dele, então
+// um vídeo de 02/10 lançado na aba "Setembro" da WAD conta na meta de setembro
+// e só passa pra outubro quando ele fechar a WAD e lançar na aba de outubro.
+// (Os gráficos de dia e de semana continuam pela data do vídeo.)
 function producaoDoMes(ym){
   const porCliente = {};
   state.clientOrder.forEach(cid=>{
-    const meses = state.videos[cid];
-    if(!meses) return;
-    Object.values(meses).forEach(rows=>(rows||[]).forEach(r=>{
-      if(!r || !r.data || r.data.slice(0,7)!==ym) return;
+    const rows = (state.videos[cid]||{})[ym];
+    (rows||[]).forEach(r=>{
+      if(!r) return;
       const e = porCliente[cid] || (porCliente[cid] = {v:0, n:0});
       e.v += parseBRL(r.valor); e.n += 1;
-    }));
+    });
   });
   return porCliente;
+}
+// clientes com vídeo na aba do mês que ainda não fecharam esse período
+function abertosDoMes(ym){
+  return state.clientOrder.filter(cid=>{
+    const rows = (state.videos[cid]||{})[ym];
+    return rows && rows.length && !periodoFechado(cid, ym);
+  });
+}
+function nomeCurto(cid){
+  const c = clientById(cid);
+  return c && c.nome ? c.nome.trim().split(/\s+/)[0] : cid;
+}
+function listaNomes(arr){
+  return arr.length<=1 ? arr.join('') : arr.slice(0,-1).join(', ') + ' e ' + arr[arr.length-1];
+}
+// mês mostrado no cartão da meta e no "Por cliente" — só tela, não é salvo.
+// null = mês atual. Vai do mês mais antigo com aba até o mês atual.
+function metaYm(){
+  const atual = monthKey(REAL_YEAR, REAL_MONTH);
+  let ym = ui.metaYm || atual;
+  if(ym > atual) ym = atual;
+  const primeiro = semanasPrimeiroYm({});
+  if(ym < primeiro) ym = primeiro;
+  return ym;
 }
 
 function painelCobrar(){
@@ -1251,14 +1279,28 @@ function painelLimite(){
 }
 
 function painelMeta(ym){
-  const mesNome = MES_NOME[REAL_MONTH].toLowerCase();
+  const atual = monthKey(REAL_YEAR, REAL_MONTH);
+  const ehAtual = ym===atual;
+  const [ano, mesK] = ym.split('-');
+  const mesNome = MES_NOME[mesK].toLowerCase();
+  const mesTxt = mesNome + (ano!==REAL_YEAR ? ` de ${ano}` : '');
   const fat = Object.values(producaoDoMes(ym)).reduce((s,e)=>s+e.v, 0);
   const meta = metaDoMes(ym);
-  const head = r => `<div class="head"><span class="label">Meta de ${mesNome}${novoTag()}</span>${r||''}</div>`;
+  const podeVoltar = ym > semanasPrimeiroYm({});
+  const seta = (dir, ok, rotulo, path)=>`<button type="button" data-action="meta-mes" data-dir="${dir}" aria-label="${rotulo}"${ok?'':' disabled'}><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="${path}"/></svg></button>`;
+  const nav = `<div class="msw" role="group" aria-label="Trocar mês da meta">${seta(-1, podeVoltar, 'Mês anterior', 'm15 18-6-6 6-6')}<span>${mesNome} ${ano}</span>${seta(1, !ehAtual, 'Próximo mês', 'm9 18 6-6-6-6')}</div>`;
+  const head = r => `<div class="head head-meta"><span class="label">Meta de ${mesTxt}${novoTag()}</span>${nav}</div>${r ? `<div class="meta-acts">${r}</div>` : ''}`;
+  // mês anterior ainda com cliente sem fechar: aviso com atalho pra ele
+  let lembrete = '';
+  if(ehAtual){
+    const ant = shiftYm(ym, -1);
+    const ab = abertosDoMes(ant);
+    if(ab.length) lembrete = `<button type="button" class="meta-lembra" data-action="meta-mes" data-dir="-1">${MES_NOME[ant.split('-')[1]]} ainda recebendo: ${esc(listaNomes(ab.map(nomeCurto)))} em aberto ›</button>`;
+  }
   if(ui.metaEditing){
     return `<div class="card card-meta s4">${head()}
       <form class="meta-form" data-meta-form>
-        <label for="meta-in">Quanto quer faturar em ${mesNome}?</label>
+        <label for="meta-in">Quanto quer faturar em ${mesTxt}?</label>
         <div class="money-in"><span>R$</span><input id="meta-in" inputmode="decimal" autocomplete="off" value="${esc(ui.metaDraft)}" placeholder="0,00"></div>
         <button class="btn-dark" type="submit">Salvar</button>
         <button class="btn-line" type="button" data-action="meta-cancel">Cancelar</button>
@@ -1267,32 +1309,53 @@ function painelMeta(ym){
   }
   if(!meta){
     return `<div class="card card-meta s4">${head()}
-      <div class="vrow"><span class="big sensitive">R$ ${fmtBRL(fat)}</span><span class="of">faturado até agora</span></div>
-      <p class="msg">Defina quanto quer faturar este mês e o app mostra se você está perto ou longe.</p>
-      <button class="btn-dark" style="align-self:flex-start" type="button" data-action="meta-edit">Definir meta do mês</button>
+      <div class="vrow"><span class="big sensitive">R$ ${fmtBRL(fat)}</span><span class="of">${ehAtual ? 'faturado até agora' : 'faturado no mês'}</span></div>
+      <p class="msg">Defina quanto quer faturar ${ehAtual ? 'este mês' : 'em '+mesTxt} e o app mostra se você está perto ou longe.</p>
+      <button class="btn-dark" style="align-self:flex-start" type="button" data-action="meta-edit">Definir meta</button>
+      ${lembrete}
     </div>`;
   }
-  const dia = now.getDate(), dim = diasNoMes(REAL_YEAR, REAL_MONTH);
-  const pct = fat/meta*100, pace = dia/dim*100, falta = meta-fat, left = dim-dia;
-  let pill, msg;
-  if(falta <= 0){
-    pill = `<span class="pill done">Meta batida</span>`;
-    msg = `Você passou a meta em <b class="sensitive">R$ ${fmtBRL(-falta)}</b>. Tudo que entrar agora é extra.`;
-  } else {
-    // ritmo esperado conta so os dias que ja terminaram — no dia 1 de manha,
-    // com R$ 0, ainda nao da pra estar "atras"
-    const ritmo = (dia-1)/dim*100;
-    pill = pct >= ritmo-2 ? `<span class="pill ok">No ritmo</span>` : `<span class="pill warn">Um pouco atrás</span>`;
-    msg = left > 0
-      ? `Faltam <b class="sensitive">R$ ${fmtBRL(falta)}</b> em ${plural(left,'dia','dias')}. Dá <b class="sensitive">R$ ${fmtBRL(falta/left)}</b> por dia.`
-      : `Faltam <b class="sensitive">R$ ${fmtBRL(falta)}</b> e o mês termina hoje.`;
-  }
   const editBtn = `<button class="edit-btn" type="button" data-action="meta-edit" aria-label="Editar meta"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>Editar</button>`;
-  return `<div class="card card-meta s4">${head(`<span class="head-r">${pill}${editBtn}</span>`)}
+  const pct = fat/meta*100, falta = meta-fat;
+  let pill, msg, footR, paceHtml = '';
+  if(ehAtual){
+    const dia = now.getDate(), dim = diasNoMes(REAL_YEAR, REAL_MONTH), left = dim-dia;
+    const pace = dia/dim*100;
+    paceHtml = `<div class="pace" style="left:${pace.toFixed(1)}%"></div>`;
+    footR = `dia ${dia} de ${dim}`;
+    if(falta <= 0){
+      pill = `<span class="pill done">Meta batida</span>`;
+      msg = `Você passou a meta em <b class="sensitive">R$ ${fmtBRL(-falta)}</b>. Tudo que entrar agora é extra.`;
+    } else {
+      // ritmo esperado conta so os dias que ja terminaram — no dia 1 de manha,
+      // com R$ 0, ainda nao da pra estar "atras"
+      const ritmo = (dia-1)/dim*100;
+      pill = pct >= ritmo-2 ? `<span class="pill ok">No ritmo</span>` : `<span class="pill warn">Um pouco atrás</span>`;
+      msg = left > 0
+        ? `Faltam <b class="sensitive">R$ ${fmtBRL(falta)}</b> em ${plural(left,'dia','dias')}. Dá <b class="sensitive">R$ ${fmtBRL(falta/left)}</b> por dia.`
+        : `Faltam <b class="sensitive">R$ ${fmtBRL(falta)}</b> e o mês termina hoje.`;
+    }
+  } else {
+    // mês que já passou: segue somando enquanto algum cliente não fechou
+    const ab = abertosDoMes(ym);
+    footR = ab.length ? `${esc(listaNomes(ab.map(nomeCurto)))} em aberto` : 'todos os clientes fechados';
+    if(falta <= 0){
+      pill = `<span class="pill done">Meta batida</span>`;
+      msg = `Você passou a meta de ${mesNome} em <b class="sensitive">R$ ${fmtBRL(-falta)}</b>.`;
+    } else if(ab.length){
+      pill = `<span class="pill ok">Ainda recebendo</span>`;
+      msg = `Faltam <b class="sensitive">R$ ${fmtBRL(falta)}</b> pra meta de ${mesNome}. O que você lançar nas abas de ${mesNome} de ${esc(listaNomes(ab.map(nomeCurto)))} ainda conta aqui.`;
+    } else {
+      pill = `<span class="pill warn">Mês encerrado</span>`;
+      msg = `Faltaram <b class="sensitive">R$ ${fmtBRL(falta)}</b> pra meta de ${mesNome}.`;
+    }
+  }
+  return `<div class="card card-meta s4">${head(pill+editBtn)}
     <div class="vrow"><span class="big sensitive">R$ ${fmtBRL(fat)}</span><span class="of sensitive">de R$ ${fmtBRL(meta)}</span></div>
-    <div class="bar"><div class="fill" style="width:${Math.min(pct,100).toFixed(1)}%"></div><div class="pace" style="left:${pace.toFixed(1)}%"></div></div>
-    <div class="foot"><span>${pct.toFixed(1).replace('.',',')}% da meta</span><span class="pace-t">dia ${dia} de ${dim}</span></div>
+    <div class="bar"><div class="fill" style="width:${Math.min(pct,100).toFixed(1)}%"></div>${paceHtml}</div>
+    <div class="foot"><span>${pct.toFixed(1).replace('.',',')}% da meta</span><span class="pace-t">${footR}</span></div>
     <p class="msg">${msg}</p>
+    ${lembrete}
   </div>`;
 }
 
@@ -1504,7 +1567,7 @@ function painelSemanas(porData){
 }
 
 function painelClientes(ym){
-  const mesNome = MES_NOME[REAL_MONTH].toLowerCase();
+  const mesNome = MES_NOME[ym.split('-')[1]].toLowerCase();
   const prod = producaoDoMes(ym);
   const lista = state.clientOrder.map(id=>{
     const c = clientById(id);
@@ -1599,13 +1662,13 @@ function renderPainel(){
   return `<div class="dash${ui.screenAnim ? ' screen-in' : ''}">
     ${painelAno()}
     ${painelLimite()}
-    ${painelMeta(ym)}
+    ${painelMeta(metaYm())}
     ${painelCobrar()}
     ${painelHoje(porData)}
     ${painelSemana(porData)}
     ${painelSemanas(porData)}
     ${painelDiaADia(porData, ym)}
-    ${painelClientes(ym)}
+    ${painelClientes(metaYm())}
     ${painelNotas()}
     ${painelRecentes()}
   </div>`;
@@ -2364,8 +2427,16 @@ function onAppClickInner(e){
     ui.semanasYm = alvo===monthKey(REAL_YEAR, REAL_MONTH) ? null : alvo;
     render();
   }
+  else if(action==='meta-mes'){
+    // so troca o mes mostrado no cartao da meta — nada e salvo
+    const alvo = shiftYm(metaYm(), Number(btn.dataset.dir)||0);
+    ui.metaYm = alvo===monthKey(REAL_YEAR, REAL_MONTH) ? null : alvo;
+    ui.metaEditing = false;
+    render();
+  }
   else if(action==='meta-edit'){
-    const meta = metaDoMes(monthKey(REAL_YEAR, REAL_MONTH));
+    ui.metaEditYm = metaYm();
+    const meta = metaDoMes(ui.metaEditYm);
     ui.metaDraft = meta ? fmtBRL(meta) : '';
     ui.metaEditing = true;
     ui.metaFocus = true;
@@ -2738,7 +2809,7 @@ function onAppSubmit(e){
     // vazio ou zero = mes sem meta (volta o botao "Definir meta do mes")
     const v = parseBRL(ui.metaDraft);
     if(!state.metas || typeof state.metas!=='object') state.metas = {};
-    state.metas[monthKey(REAL_YEAR, REAL_MONTH)] = v > 0 ? Math.round(v*100)/100 : 0;
+    state.metas[ui.metaEditYm || monthKey(REAL_YEAR, REAL_MONTH)] = v > 0 ? Math.round(v*100)/100 : 0;
     ui.metaEditing = false;
     persist();
     render();

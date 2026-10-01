@@ -139,7 +139,7 @@ em cada cliente e tudo junto lá em cima"*.
 
 **Meta mensal:** `state.metas = {"AAAA-MM": valor}`; mês sem meta herda a anterior; 0 = sem meta.
 É o valor que ele precisa pra pagar as contas do mês (R$ 6.000 no início; setembro/2026 = R$ 7.500).
-Conta pela **data do vídeo** (produção), não pela aba.
+Desde 2026-10-01 conta pela **aba do mês** em que o vídeo foi lançado (pedido do Joel: enquanto WAD/Wide não fecham setembro, o que ele lança nas abas de setembro conta em setembro, mesmo com data de outubro). O cartão tem setas ‹ › (`ui.metaYm`, só tela) e o "Por cliente" acompanha o mês escolhido; mês passado mostra "Ainda recebendo"/"Mês encerrado" e o mês atual avisa "Setembro ainda recebendo: … ›". Editar a meta vale pro mês mostrado. Gráficos de dia/semana seguem pela data do vídeo.
 
 **Períodos de cobrança por cliente (desde 2026-09-25):** mockup https://claude.ai/artifact/A6vsTT8nfzLKY9NPbzrUeD
 - Fábio: dia 01 ao último dia do mês. Wide: dia 05 ao dia 04. WAD: ~08 ao 08, mas varia (07/08/09).
