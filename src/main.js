@@ -3421,7 +3421,7 @@ function generatePDF(clientId, ym){
   doc.text(isEsp ? `${rows.length} lançamento(s) neste mês.` : `${rows.length} vídeo(s) editado(s) neste mês.`, marginX, finalY);
   doc.text(`Gerado em ${new Date().toLocaleDateString('pt-BR')}`, marginX, finalY+13);
 
-  const filename = `${mesNome} - ${year} - ${c.nome}.pdf`;
+  const filename = `${m} - ${mesNome} - ${year} - ${c.nome}.pdf`;
 
   // Not using doc.save() here — jsPDF's own bundled FileSaver sniffs for
   // Safari and opens the PDF in a new window itself before the save dialog,
