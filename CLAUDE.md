@@ -264,13 +264,9 @@ privado — ele tentou tornar privado em 2026-09-13 e voltamos pra público; nen
 
 - [x] **Aba Orçamentos + calculadora "Quanto cobrar?" (2026-09-29, mockup https://claude.ai/artifact/RA5LryQDxU3TWvUWSSrNZw — feita no ramo `main-drgofb`; publicar pelo Mac).** Código: bloco "ORÇAMENTOS" em `src/main.js` (`renderOrcamentos`, `orcCalcular`, `orcGerarPDF`, `orcAcao`, `orcCampo`) e no `index.html`. `ui.tab='ORCAMENTOS'`, `ui.orcId`. Calculadora: hora real = média do valor por vídeo dos fixos ÷ 1h15 (~R$ 43); freela soma adicional (20/30/50%) e desconto de volume até 8% (fixo novo: sem adicional, até 12%); piso R$ 40/vídeo. "Usar preço justo" põe o preço cheio no item e o desconto de volume separado (%). Pagamento: Pix (desconto extra opcional), cartão em até Nx com taxa da maquininha, 50/50. "Aprovado" cria aba de cliente (tipo fixo, valor por vídeo = total ÷ qtd) sem vídeos — desfazer só apaga a aba se ela seguir sem vídeos. Barra de baixo do celular com 5 botões usa nomes curtos (Notas, Config.). Calculadora parte do valor da hora (meta do mês ÷ horas/mês), soma dificuldade, prazo, extras e desconto de volume; 3 faixas (mínimo/justo/com folga) + o que ele cobra hoje. Orçamento com itens (qtd × valor), total automático ou manual, texto pronto, prazo, validade, PDF com a identidade (sem Pix), histórico com status e "aprovado → vira aba esporádica". Dados novos só acrescentando (`state.orcamentos`).
 
-- [ ] **App "Apuração 2026" (TEMPORÁRIO, 2026-10-04, feito no ramo `ccr-b84b9436-dh2re9`).** Painel da eleição separado do Ritmo:
-      mora só em `public/eleicoes/` → link `joonetoo.github.io/mei-financeiro/eleicoes/` (PWA próprio, ícone urna azul).
-      Só LÊ os arquivos públicos do TSE (`resultados.tse.jus.br/oficial/ele2026/…`, eleição 6257 = Presidente, 6259 = Governador c0003 /
-      Senado c0005 do PR; o TSE libera CORS pro `joonetoo.github.io`). Não toca no Supabase nem nos dados do Ritmo. Fotos oficiais
-      copiadas em `public/eleicoes/fotos/`. Mockup aprovado: https://claude.ai/artifact/1ewP4E77bbrUXKPkgfbtfq.
-      Única mudança fora da pasta: `public/sw.js` do Ritmo ignora `eleicoes/` (senão a cópia offline do Ritmo virava a página da eleição).
-      **Para apagar depois da eleição:** remover `public/eleicoes/` e a linha `eleicoes/` do `public/sw.js`, publicar.
+- [x] **App "Apuração 2026" saiu daqui (2026-10-04).** Ficou um dia em `public/eleicoes/` e virou projeto próprio:
+      repositório `joonetoo/eleicoes-2026`, link https://joonetoo.github.io/eleicoes-2026/, pasta no Mac `CLAUDE/Eleições 2026`.
+      Nada dele mora mais no Ritmo (a trava no `public/sw.js` também foi desfeita).
 
 _Quando o Joel trouxer uma ideia nova, anotar aqui antes de começar, e marcar quando publicar._
 

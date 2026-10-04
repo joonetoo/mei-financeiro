@@ -74,9 +74,6 @@ self.addEventListener('fetch', ev => {
   if(req.method !== 'GET') return;
   const u = new URL(req.url);
 
-  // app da apuracao (pasta eleicoes/) e separado: tem a propria copia, o Ritmo nao mexe
-  if(u.origin === self.location.origin && u.pathname.startsWith(ESCOPO + 'eleicoes/')) return;
-
   // a pagina: rede primeiro, copia so sem conexao
   if(req.mode === 'navigate' && u.origin === self.location.origin && u.pathname.startsWith(ESCOPO)){
     ev.respondWith((async () => {
