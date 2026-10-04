@@ -1,0 +1,440 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Apuração 2026</title>
+<meta name="description" content="Apuração ao vivo: Presidente, Governador e Senado do Paraná, com dados oficiais do TSE.">
+<meta name="theme-color" content="#EEF0F4" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#0E131D" media="(prefers-color-scheme: dark)">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Apuração">
+<link rel="manifest" href="manifest.json">
+<link rel="icon" href="favicon.png" type="image/png">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Open+Sans:wght@400;600;700;800&display=swap">
+<script>
+/* tema escolhido aplica antes de desenhar (Automático / Claro / Escuro) */
+(function(){try{var t=localStorage.getItem('apuracao-tema');if(t==='light'||t==='dark')document.documentElement.setAttribute('data-theme',t);}catch(e){}})();
+</script>
+<style>
+/* Layout: informação no estilo das páginas oficiais de apuração (linhas com foto, partido, % e barra).
+   Mac (>=821px): Liquid Glass, 3 colunas, cabe inteiro em 1512x982 sem rolar (tela ao lado da TV).
+   Celular (<=760px): One UI — título grande em cima, cartões de cantos 26, botões embaixo no alcance do dedão. */
+:root{
+  --fundo:#EEF0F4; --cartao:#FFFFFF; --borda:#E3E5E8; --linha:#EEF0F2; --texto:#1F2329; --suave:#5F6672; --fraco:#8E949D;
+  --azul:#1B3A6B; --aviso:#F7F0DC; --avisoTx:#7A5D0E;
+  --ok:#1E7F52; --okBg:#DDF1E5; --t2:#7A5D0E; --t2Bg:#F5EBCF; --lulaBg:rgba(214,8,40,.07);
+  --pt:#D60828; --pl:#272D97;
+  --plTx:#272D97; --ptTx:#D60828; --branco:#FFFFFF; --sombra:rgba(20,30,60,.45);
+  --vidro:linear-gradient(180deg,rgba(255,255,255,.62),rgba(255,255,255,.22) 38%,rgba(255,255,255,.14)),rgba(255,255,255,.5);
+  --vidroTopo:linear-gradient(180deg,rgba(255,255,255,.7),rgba(255,255,255,.3)),rgba(255,255,255,.35);
+  --vidroBorda:rgba(255,255,255,.8); --vidroBrilho:rgba(255,255,255,.95); --lado:rgba(255,255,255,.45); --btBg:rgba(255,255,255,.6);
+  --barraCel:rgba(238,240,244,.94); --toastBg:rgba(255,255,255,.92);
+  --manchas:radial-gradient(620px 480px at 8% 4%, rgba(214,8,40,.16), transparent 70%),radial-gradient(640px 520px at 92% 8%, rgba(39,45,151,.16), transparent 70%),radial-gradient(700px 520px at 55% 100%, rgba(232,181,74,.20), transparent 72%),radial-gradient(520px 420px at 0% 80%, rgba(30,142,90,.10), transparent 70%);
+  --vivoC:#C4170C;
+  --f:"Open Sans",Inter,-apple-system,"Segoe UI",Roboto,Arial,sans-serif;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--vivoC:#FF5C5C; --fundo:#0E131D; --cartao:#171E2B; --borda:#273041; --linha:rgba(255,255,255,.07); --texto:#ECEFF4; --suave:#A4ADBB; --fraco:#7C8594;
+  --azul:#9DB8FF; --aviso:#3A3017; --avisoTx:#F2D58A; --ok:#5FD49A; --okBg:rgba(95,212,154,.14); --t2:#F2D58A; --t2Bg:rgba(242,213,138,.14);
+  --lulaBg:rgba(255,77,99,.13); --plTx:#8B93FF; --ptTx:#FF5C70; --branco:#1E2635; --sombra:rgba(0,0,0,.6);
+  --vidro:linear-gradient(180deg,rgba(255,255,255,.09),rgba(255,255,255,.03) 38%,rgba(255,255,255,.02)),rgba(23,30,43,.55);
+  --vidroTopo:linear-gradient(180deg,rgba(255,255,255,.10),rgba(255,255,255,.03)),rgba(23,30,43,.5);
+  --vidroBorda:rgba(255,255,255,.12); --vidroBrilho:rgba(255,255,255,.14); --lado:rgba(255,255,255,.05); --btBg:rgba(255,255,255,.08);
+  --barraCel:rgba(14,19,29,.92); --toastBg:rgba(30,38,53,.92);
+  --manchas:radial-gradient(620px 480px at 8% 4%, rgba(214,8,40,.22), transparent 70%),radial-gradient(640px 520px at 92% 8%, rgba(70,80,220,.24), transparent 70%),radial-gradient(700px 520px at 55% 100%, rgba(232,181,74,.10), transparent 72%),radial-gradient(520px 420px at 0% 80%, rgba(30,142,90,.10), transparent 70%);
+  color-scheme:dark;}}
+:root[data-theme="dark"]{--vivoC:#FF5C5C; --fundo:#0E131D; --cartao:#171E2B; --borda:#273041; --linha:rgba(255,255,255,.07); --texto:#ECEFF4; --suave:#A4ADBB; --fraco:#7C8594;
+  --azul:#9DB8FF; --aviso:#3A3017; --avisoTx:#F2D58A; --ok:#5FD49A; --okBg:rgba(95,212,154,.14); --t2:#F2D58A; --t2Bg:rgba(242,213,138,.14);
+  --lulaBg:rgba(255,77,99,.13); --plTx:#8B93FF; --ptTx:#FF5C70; --branco:#1E2635; --sombra:rgba(0,0,0,.6);
+  --vidro:linear-gradient(180deg,rgba(255,255,255,.09),rgba(255,255,255,.03) 38%,rgba(255,255,255,.02)),rgba(23,30,43,.55);
+  --vidroTopo:linear-gradient(180deg,rgba(255,255,255,.10),rgba(255,255,255,.03)),rgba(23,30,43,.5);
+  --vidroBorda:rgba(255,255,255,.12); --vidroBrilho:rgba(255,255,255,.14); --lado:rgba(255,255,255,.05); --btBg:rgba(255,255,255,.08);
+  --barraCel:rgba(14,19,29,.92); --toastBg:rgba(30,38,53,.92);
+  --manchas:radial-gradient(620px 480px at 8% 4%, rgba(214,8,40,.22), transparent 70%),radial-gradient(640px 520px at 92% 8%, rgba(70,80,220,.24), transparent 70%),radial-gradient(700px 520px at 55% 100%, rgba(232,181,74,.10), transparent 72%),radial-gradient(520px 420px at 0% 80%, rgba(30,142,90,.10), transparent 70%);
+  color-scheme:dark;}
+*{box-sizing:border-box}
+body{margin:0;background:var(--fundo);color:var(--texto);font-family:var(--f);-webkit-font-smoothing:antialiased}
+button{font-family:inherit}
+
+/* ---------- topo ---------- */
+.topo{max-width:1480px;margin:0 auto;padding:14px 16px 0;display:flex;align-items:center;gap:14px;flex-wrap:wrap}
+.marca{display:flex;align-items:baseline;gap:10px}
+.marca h1{margin:0;font-size:22px;font-weight:400;color:var(--azul)}
+.marca h1 b{font-weight:800}
+.vivo{display:inline-flex;align-items:center;gap:6px;font-weight:700;color:var(--vivoC);font-size:12px;letter-spacing:.06em}
+.vivo i{width:8px;height:8px;border-radius:50%;background:var(--vivoC);animation:p 1.4s infinite}
+@keyframes p{50%{opacity:.3}}
+.linha2{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+.info{font-size:13px;color:var(--suave)}
+.demo{background:var(--aviso);color:var(--avisoTx);font-size:12px;font-weight:600;padding:4px 10px;border-radius:99px}
+.acoes{margin-left:auto;display:flex;gap:8px}
+.bt{font-weight:700;font-size:13px;color:var(--texto);background:var(--branco);border:1px solid var(--borda);border-radius:99px;padding:8px 16px;cursor:pointer;display:inline-flex;align-items:center;gap:6px}
+.bt svg{width:16px;height:16px}
+.bt:focus-visible{outline:2px solid var(--azul);outline-offset:2px}
+.bt.on{background:var(--texto);color:var(--fundo);border-color:transparent}
+
+/* ---------- grade ---------- */
+main{max-width:1480px;margin:0 auto;padding-inline:16px;padding-block:14px 24px;display:grid;grid-template-columns:1.12fr 1fr 1fr;gap:14px;align-items:start}
+.cargo{background:var(--cartao);border:1px solid var(--borda);border-radius:20px;overflow:hidden;min-width:0}
+.cab{padding:14px 18px 12px}
+.cab .lugar{font-size:11px;font-weight:700;color:var(--suave);text-transform:uppercase;letter-spacing:.08em}
+.cab h2{margin:0 0 8px;font-size:24px;font-weight:400;line-height:1.2}
+.ap{display:flex;justify-content:space-between;font-size:12px;color:var(--suave);margin-bottom:5px}
+.ap b{color:var(--texto);font-weight:700;font-variant-numeric:tabular-nums}
+.trilho{height:5px;background:var(--linha);border-radius:99px;overflow:hidden}
+.trilho i{display:block;height:100%;background:var(--texto);border-radius:99px;transition:width .8s;width:0}
+.regra{font-size:11.5px;color:var(--fraco);margin-top:7px}
+
+/* duelo do Presidente */
+.duelo{display:grid;grid-template-columns:1fr 1fr;gap:10px;padding:2px 14px 8px}
+.lado{border-radius:16px;padding:12px;background:rgba(31,35,41,.035);display:grid;grid-template-columns:64px 1fr;gap:0 12px;align-items:center;transition:background .6s}
+.lado.frente.lula{background:var(--lulaBg)}
+.lado.frente.fla{background:rgba(39,45,151,.07)}
+.lado img{grid-row:1/4;width:64px;height:64px;border-radius:50%;object-fit:cover;object-position:50% 18%;border:3px solid var(--branco);box-shadow:0 0 0 2px var(--c)}
+.lado .nm{font-weight:800;font-size:15px;line-height:1.15}
+.lado .pc{font-weight:800;font-size:30px;line-height:1.05;font-variant-numeric:tabular-nums;color:var(--ct)}
+.lado .vt{font-size:12px;color:var(--suave);font-variant-numeric:tabular-nums}
+.bd{margin:0 14px;display:flex;height:8px;border-radius:99px;overflow:hidden;background:var(--linha);position:relative}
+.bd i{display:block;transition:width .8s}
+.bd:after{content:"";position:absolute;left:50%;top:-3px;bottom:-3px;width:2px;background:var(--texto)}
+.sg{box-shadow:inset 0 0 0 1px rgba(255,255,255,.12)}
+.dif{margin:7px 14px 8px;font-size:13px;color:var(--suave);text-align:center}
+.dif b{color:var(--texto)}
+.sep{font-size:11px;font-weight:700;color:var(--fraco);text-transform:uppercase;letter-spacing:.08em;padding:6px 18px 2px;border-top:1px solid var(--linha)}
+
+/* linhas de candidato */
+.lista{list-style:none;margin:0;padding:0 0 6px}
+.cand{display:grid;grid-template-columns:42px minmax(0,1fr) auto;gap:0 12px;align-items:center;padding:7px 18px;border-top:1px solid var(--linha);transition:background .6s}
+.cand:first-child{border-top:0}
+.foto{grid-row:1/4;width:42px;height:42px;border-radius:50%;object-fit:cover;object-position:50% 18%;background:var(--linha)}
+.nome{font-size:14px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.meta{font-size:12px;color:var(--suave);display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+.sg{color:#fff;font-weight:700;font-size:10px;padding:1px 5px;border-radius:4px}
+.num{font-weight:700;color:var(--texto)}
+.dir{grid-row:1/3;grid-column:3;text-align:right}
+.pc2{font-size:19px;font-weight:700;font-variant-numeric:tabular-nums;line-height:1.1}
+.vt2{font-size:11.5px;color:var(--suave);font-variant-numeric:tabular-nums}
+.barra{grid-column:2/-1;height:4px;border-radius:99px;background:var(--linha);overflow:hidden;margin-top:5px}
+.barra i{display:block;height:100%;border-radius:99px;transition:width .8s}
+.tag{font-size:10px;font-weight:800;padding:1px 6px;border-radius:4px;letter-spacing:.04em;white-space:nowrap;display:inline-block}
+.tag.el{background:var(--okBg);color:var(--ok)}
+.tag.t2{background:var(--t2Bg);color:var(--t2)}
+.cand.top .nome{font-weight:800}
+.cand.top .pc2{font-size:22px}
+.cand.lula.top{background:var(--lulaBg)}
+.mini .cand{padding:5px 18px;grid-template-columns:30px minmax(0,1fr) auto}
+.mini .foto{width:30px;height:30px}
+.mini .nome{font-size:13px}
+.mini .pc2{font-size:15px}
+.mini .barra{display:none}
+
+/* aviso da virada + confete */
+.toast{position:fixed;left:50%;top:18px;transform:translate(-50%,-20px);opacity:0;z-index:60;background:var(--toastBg);-webkit-backdrop-filter:blur(24px) saturate(1.6);backdrop-filter:blur(24px) saturate(1.6);border:1px solid var(--vidroBorda);box-shadow:0 18px 50px -12px rgba(0,0,0,.3);border-radius:22px;padding:12px 18px 12px 12px;display:flex;gap:12px;align-items:center;pointer-events:none;transition:.45s cubic-bezier(.2,1.2,.4,1);max-width:calc(100vw - 32px)}
+.toast.on{opacity:1;transform:translate(-50%,0)}
+.toast img{width:48px;height:48px;border-radius:50%;object-fit:cover;object-position:50% 18%;box-shadow:0 0 0 2px var(--pt)}
+.toast b{display:block;font-size:16px}
+.toast span{font-size:13px;color:var(--suave)}
+#confete{position:fixed;inset:0;pointer-events:none;z-index:50;width:100%;height:100%}
+
+/* ================= Mac: Liquid Glass ================= */
+@media (min-width:821px){
+  body{min-height:100vh;background:var(--manchas),var(--fundo);background-attachment:fixed}
+  .topo{margin-top:12px;padding:10px 14px 10px 22px;max-width:calc(1480px - 32px);width:calc(100% - 32px);border-radius:24px;
+    background:var(--vidroTopo);
+    -webkit-backdrop-filter:blur(26px) saturate(1.6);backdrop-filter:blur(26px) saturate(1.6);
+    border:1px solid var(--vidroBorda);box-shadow:inset 0 1px 0 var(--vidroBrilho),0 14px 30px -20px var(--sombra)}
+  .cargo{border-radius:26px;
+    background:var(--vidro);
+    -webkit-backdrop-filter:blur(30px) saturate(1.6);backdrop-filter:blur(30px) saturate(1.6);
+    border:1px solid var(--vidroBorda);
+    box-shadow:inset 0 1px 0 var(--vidroBrilho),0 22px 44px -26px var(--sombra)}
+  .lado{background:var(--lado)}
+  .bt{background:var(--btBg);border-color:var(--vidroBorda);box-shadow:inset 0 1px 0 var(--vidroBrilho)}
+  .cand,.sep{border-top-color:var(--linha)}
+}
+@supports not ((backdrop-filter:blur(1px)) or (-webkit-backdrop-filter:blur(1px))){
+  @media (min-width:821px){.cargo,.topo{background:var(--cartao)}}
+}
+/* telas médias (Mac com janela menor): 2 colunas */
+@media (max-width:1180px) and (min-width:761px){main{grid-template-columns:1fr 1fr}.cargo.pres{grid-column:1/-1}}
+
+/* ================= celular: One UI ================= */
+@media (max-width:760px){
+  body{padding-bottom:calc(96px + env(safe-area-inset-bottom))}
+  .topo{padding:44px 20px 14px;display:block}
+  .marca h1{font-size:30px;line-height:1.1}
+  .linha2{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:8px}
+  .demo{display:inline-block;margin-top:10px}
+  .acoes{position:fixed;left:0;right:0;bottom:0;z-index:40;margin:0;padding:10px 16px calc(14px + env(safe-area-inset-bottom));
+    background:var(--barraCel);-webkit-backdrop-filter:blur(20px);backdrop-filter:blur(20px);
+    border-top:1px solid var(--linha);box-shadow:0 -10px 24px -18px rgba(20,30,60,.35)}
+  .acoes .bt{flex:1;white-space:nowrap;padding:8px 10px;justify-content:center;min-height:50px;border-radius:999px;border:0;background:var(--branco);box-shadow:0 1px 2px rgba(20,30,60,.12);font-size:14px}
+  .acoes .bt.on{background:var(--texto);color:var(--fundo)}
+  main{grid-template-columns:1fr;gap:12px;padding-block:4px 16px}
+  .cargo{border-radius:26px;border:0;box-shadow:0 1px 2px rgba(20,30,60,.08)}
+  .cab{padding:20px 20px 12px}
+  .cand,.mini .cand{padding-left:20px;padding-right:20px}
+  .duelo{gap:8px;padding:2px 12px 8px}
+  .lado{grid-template-columns:1fr;justify-items:center;text-align:center;padding:14px 8px;border-radius:22px}
+  .lado img{grid-row:auto;width:72px;height:72px;margin-bottom:6px}
+  .lado .pc{font-size:28px}
+  .toast{top:calc(env(safe-area-inset-top,0px) + 12px)}
+}
+.bt em{display:none;font-style:normal}
+@media (max-width:760px){.acoes .bt span{display:none}.acoes .bt em{display:inline}}
+@media (prefers-reduced-motion:reduce){.vivo i{animation:none}}
+</style>
+<style>
+/* avisos de estado (no lugar da faixa "prévia") */
+.demo.erro{background:rgba(214,8,40,.12);color:var(--ptTx)}
+.demo.ok{background:var(--okBg);color:var(--ok)}
+.demo[hidden]{display:none!important}
+.vivo.parado i{animation:none;opacity:.5}
+.vazio .pc2,.vazio .pc{opacity:.45}
+</style>
+</head>
+<body>
+<canvas id="confete"></canvas>
+<div class="toast" id="toast" role="status"><img alt="" id="toastFoto" src="fotos/280002542548.jpeg"><div><b id="toastTit">Lula passou na frente</b><span id="toastTx"></span></div></div>
+
+<header class="topo">
+  <div class="marca"><h1><b>APURAÇÃO</b> 2026</h1></div>
+  <div class="linha2"><span class="vivo parado" id="vivo"><i></i><span id="vivoTx">AGUARDANDO</span></span><span class="info">1º turno · fonte: TSE <span id="hora"></span></span></div>
+  <span class="demo" id="estado">Aguardando os primeiros números do TSE (previsto para as 17h).</span>
+  <div class="acoes">
+    <button class="bt" id="som" type="button"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M11 5 6 9H3v6h3l5 4z"/><path d="M15.5 8.5a5 5 0 0 1 0 7M18.5 5.5a9 9 0 0 1 0 13"/></svg><span>Ligar som</span><em>Som</em></button>
+    <button class="bt" id="tema" type="button"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 3a9 9 0 1 0 9 9 7 7 0 0 1-9-9z"/></svg><span>Automático</span><em>Tema</em></button>
+    <button class="bt" id="replay" type="button"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5"/></svg><span>Testar a virada</span><em>Testar</em></button>
+  </div>
+</header>
+
+<main>
+  <section class="cargo pres" aria-label="Presidente">
+    <div class="cab"><div class="lugar">Brasil</div><h2>Presidente</h2>
+      <div class="ap"><span>Seções apuradas</span><b id="apP">0,00%</b></div><div class="trilho"><i id="trP"></i></div></div>
+    <div class="duelo">
+      <div class="lado lula" id="ladoL" style="--c:var(--pt);--ct:var(--ptTx)"><img src="fotos/280002542548.jpeg" alt="Foto oficial de Lula"><div class="nm">Lula <span class="sg" style="background:var(--pt)">PT</span> <span class="num">13</span> <span id="tagL"></span></div><div class="pc" id="pL">0,00%</div><div class="vt" id="vL">0 votos</div></div>
+      <div class="lado fla" id="ladoF" style="--c:var(--pl);--ct:var(--plTx)"><img src="fotos/280002551544.jpeg" alt="Foto oficial de Flávio Bolsonaro"><div class="nm">Flávio Bolsonaro <span class="sg" style="background:var(--pl)">PL</span> <span class="num">22</span> <span id="tagF"></span></div><div class="pc" id="pF">0,00%</div><div class="vt" id="vF">0 votos</div></div>
+    </div>
+    <div class="bd"><i id="dL" style="background:var(--pt)"></i><i style="flex:1"></i><i id="dF" style="background:var(--pl)"></i></div>
+    <p class="dif" id="dif">Aguardando dados do TSE</p>
+    <div class="sep">Demais candidatos</div>
+    <ul class="lista mini" id="lP"></ul>
+  </section>
+  <section class="cargo" aria-label="Governador do Paraná">
+    <div class="cab"><div class="lugar">Paraná</div><h2>Governador</h2>
+      <div class="ap"><span>Seções apuradas</span><b id="apG">0,00%</b></div><div class="trilho"><i id="trG"></i></div>
+      <div class="regra">Mais de 50% dos válidos vence no 1º turno.</div></div>
+    <ul class="lista" id="lG"></ul>
+  </section>
+  <section class="cargo" aria-label="Senado do Paraná">
+    <div class="cab"><div class="lugar">Paraná</div><h2>Senador</h2>
+      <div class="ap"><span>Seções apuradas</span><b id="apS">0,00%</b></div><div class="trilho"><i id="trS"></i></div>
+      <div class="regra">2 vagas: os 2 mais votados são eleitos.</div></div>
+    <ul class="lista" id="lS"></ul>
+  </section>
+</main>
+
+<script>
+/* ============================================================
+   APURAÇÃO 2026 — app separado do Ritmo (mesmo repositório, pasta eleicoes/).
+   Só LÊ os arquivos públicos do TSE. Não grava nada em servidor nenhum.
+   No aparelho guarda só: tema, som ligado, a última leitura (pra abrir
+   rápido) e quem estava na frente (pra saber quando o Lula vira).
+   ============================================================ */
+const TSE='https://resultados.tse.jus.br/oficial/ele2026';
+const CARGOS={
+  pres:{nome:'Presidente', urls:[TSE+'/6257/dados/br/br-c0001-e006257-u.json', TSE+'/6257/dados-simplificados/br/br-c0001-e006257-r.json']},
+  gov: {nome:'Governador', urls:[TSE+'/6259/dados/pr/pr-c0003-e006259-u.json', TSE+'/6259/dados-simplificados/pr/pr-c0003-e006259-r.json']},
+  sen: {nome:'Senador',    urls:[TSE+'/6259/dados/pr/pr-c0005-e006259-u.json', TSE+'/6259/dados-simplificados/pr/pr-c0005-e006259-r.json']},
+};
+// lista oficial (arquivo do TSE de 03/10/2026): [número, nome de urna, partido, código da foto]
+const CAND={
+  pres:[[13,'Lula','PT','280002542548'],[22,'Flávio Bolsonaro','PL','280002551544'],[55,'Ronaldo Caiado','PSD','280002551932'],[30,'Zema','NOVO','280002539826'],[14,'Renan Santos','MISSÃO','280002540694'],[70,'Escritor Augusto Cury','AVANTE','280002551547'],[80,'Samara','UP','280002538811'],[16,'Hertz Dias','PSTU','280002541457'],[21,'Edmilson Costa','PCB','280002551975'],[27,'Clariana Barão','DC','280002552484'],[29,'Rui Costa Pimenta','PCO','280002552487'],[35,'Veterinário Wilson Grassi','DEMOCRATA','280002548139']],
+  gov:[[22,'Sergio Moro','PL','160002540833'],[12,'Requião Filho','PDT','160002547666'],[55,'Sandro Alex','PSD','160002549553'],[80,'Tayná Miessa','UP','160002550997'],[14,'Luiz França','MISSÃO','160002551353'],[33,'Doutor Alexandre Salomão','MOBILIZA','160002547594'],[16,'Samuel de Mattos','PSTU','160002548010'],[29,'Adriano Funileiro','PCO','160002552560']],
+  sen:[[222,'Filipe Barros','PL','160002547660'],[131,'Gleisi','PT','160002547656'],[300,'Deltan Dallagnol','NOVO','160002547661'],[100,'Alexandre Curi','REPUBLICANOS','160002547963'],[555,'Cristina Graeml','PSD','160002549555'],[132,'Dr. Rosinha','PT','160002547658'],[800,'Joaquim do MLB','UP','160002551043'],[144,'Karen Guerreiro','MISSÃO','160002551121'],[290,'Marcelo Marcelino','PCO','160002552563']],
+};
+const COR={PT:'#D60828',PL:'#272D97',PSD:'#A0A00B',NOVO:'#4083A6',PDT:'#2569AD',REPUBLICANOS:'#3C678A',UP:'#454545','MISSÃO':'#D8942F',PCO:'#923D00',PSTU:'#B35454',MOBILIZA:'#C36969',PCB:'#E54B5A',DC:'#AB7C24',AVANTE:'#4C8790',DEMOCRATA:'#13617C'};
+const INTERVALO=30000;
+
+const $=id=>document.getElementById(id);
+const nf=(n,d=2)=>n.toLocaleString('pt-BR',{minimumFractionDigits:d,maximumFractionDigits:d});
+const ni=n=>Math.round(n).toLocaleString('pt-BR');
+const num=s=>{if(s==null||s==='')return 0;if(typeof s==='number')return s;const t=String(s).trim();return parseFloat(t.includes(',')?t.replace(/\./g,'').replace(',','.'):t)||0;};
+const ler=k=>{try{return localStorage.getItem(k)}catch(e){return null}};
+const gravar=(k,v)=>{try{localStorage.setItem(k,v)}catch(e){}};
+
+/* ---------- leitura dos arquivos do TSE (aceita os dois formatos) ---------- */
+function interpretar(d){
+  if(!d||typeof d!=='object') return null;
+  const votos={};
+  const pega=x=>{const n=+x.n;if(!n)return;votos[n]={v:num(x.vap),pc:num(x.pvap),e:x.e,st:x.st||''};};
+  if(Array.isArray(d.carg)) for(const c of d.carg) for(const a of c.agr||[]) for(const p of a.par||[]) for(const x of p.cand||[]) pega(x); // formato completo
+  if(Array.isArray(d.cand)) d.cand.forEach(pega);                                                                                       // formato simplificado
+  const s=d.s||d, v=d.v||d;
+  return {pst:num(s.pst), vv:num(v.vv), votos, data:(d.dt&&d.ht)?d.dt+' '+d.ht:'', gerado:(d.dg||'')+' '+(d.hg||'')};
+}
+function quando(t){ // "04/10/2026 18:32:10" -> número comparável
+  const m=/(\d\d)\/(\d\d)\/(\d{4})\s+(\d\d):(\d\d):(\d\d)/.exec(t||'');return m?+(m[3]+m[2]+m[1]+m[4]+m[5]+m[6]):0;}
+async function buscar(url){
+  const r=await fetch(url,{cache:'no-store'});
+  if(r.status===404||r.status===403) return null;      // arquivo ainda não publicado
+  if(!r.ok) throw new Error('TSE respondeu '+r.status);
+  return interpretar(await r.json());
+}
+async function buscarCargo(k){
+  const res=await Promise.allSettled(CARGOS[k].urls.map(buscar));
+  const bons=res.filter(x=>x.status==='fulfilled'&&x.value).map(x=>x.value);
+  if(!bons.length){ if(res.every(x=>x.status==='rejected')) throw res[0].reason; return null; }
+  // fica com o mais adiantado: mais seções apuradas; empate -> horário mais novo
+  bons.sort((a,b)=>(b.pst-a.pst)||(quando(b.data||b.gerado)-quando(a.data||a.gerado)));
+  return bons[0];
+}
+
+/* ---------- desenho ---------- */
+function montar(k,r){
+  const tot=r?r.vv:0;
+  return CAND[k].map(([n,nm,sg,sq])=>{
+    const x=(r&&r.votos[n])||{v:0,pc:0,e:'',st:''};
+    const pc=x.pc||(tot?x.v/tot*100:0);
+    return {n,nm,sg,sq,v:x.v,pc,e:x.e,st:x.st};
+  }).sort((a,b)=>(b.v-a.v)||a.nm.localeCompare(b.nm,'pt-BR'));
+}
+function etiqueta(c){
+  const st=(c.st||'').toLowerCase();
+  if(st.includes('2º turno')||st.includes('2o turno')||st.includes('segundo turno')) return '<span class="tag t2">2º TURNO</span>';
+  if(c.e==='s'||(st.includes('eleito')&&!st.includes('não')&&!st.includes('nao'))) return '<span class="tag el">ELEITO</span>';
+  return '';
+}
+function linhas(el,ord,destaque){
+  const max=Math.max(ord[0]?ord[0].pc:0,.0001);
+  el.innerHTML=ord.map((c,i)=>{
+    const cor=COR[c.sg]||'#666';
+    return `<li class="cand${destaque&&i===0&&c.v>0?' top':''}${c.n===13?' lula':''}">
+      <img class="foto" src="fotos/${c.sq}.jpeg" alt="Foto oficial de ${c.nm}">
+      <span class="nome">${c.nm}</span>
+      <div class="dir"><div class="pc2">${nf(c.pc)}%</div><div class="vt2">${ni(c.v)} votos</div></div>
+      <span class="meta"><span class="sg" style="background:${cor}">${c.sg}</span><span class="num">${c.n}</span>${etiqueta(c)}</span>
+      <span class="barra"><i style="width:${c.pc/max*100}%;background:${cor}"></i></span></li>`;
+  }).join('');
+}
+function apurado(idAp,idTr,r){const p=r?r.pst:0;$(idAp).textContent=nf(p)+'%';$(idTr).style.width=p+'%';}
+
+function desenhar(dados){
+  const {pres,gov,sen}=dados;
+  document.body.classList.toggle('vazio',!(pres&&pres.vv));
+  apurado('apP','trP',pres);apurado('apG','trG',gov);apurado('apS','trS',sen);
+  const P=montar('pres',pres),L=P.find(c=>c.n===13),F=P.find(c=>c.n===22);
+  $('pL').textContent=nf(L.pc)+'%';$('pF').textContent=nf(F.pc)+'%';
+  $('vL').textContent=ni(L.v)+' votos';$('vF').textContent=ni(F.v)+' votos';
+  $('tagL').innerHTML=etiqueta(L);$('tagF').innerHTML=etiqueta(F);
+  const soma=L.pc+F.pc;
+  $('dL').style.width=L.pc+'%';$('dF').style.width=F.pc+'%';
+  $('ladoL').classList.toggle('frente',L.v>F.v);$('ladoF').classList.toggle('frente',F.v>L.v);
+  if(!L.v&&!F.v) $('dif').textContent='Aguardando dados do TSE';
+  else if(L.v===F.v) $('dif').innerHTML='<b>Empate</b> entre Lula e Flávio Bolsonaro';
+  else $('dif').innerHTML=`<b>${L.v>F.v?'Lula':'Flávio Bolsonaro'}</b> à frente por <b>${ni(Math.abs(L.v-F.v))}</b> votos`;
+  linhas($('lP'),P.filter(c=>c.n!==13&&c.n!==22),false);
+  linhas($('lG'),montar('gov',gov),true);
+  linhas($('lS'),montar('sen',sen),true);
+
+  // status do topo
+  const pst=pres?pres.pst:0, fim=pst>=100;
+  $('vivo').classList.toggle('parado',!(pst>0&&!fim));
+  $('vivoTx').textContent=fim?'ENCERRADA':pst>0?'AO VIVO':'AGUARDANDO';
+  const ref=pres&&(pres.data||pres.gerado);
+  $('hora').textContent=ref&&pst>0?'· TSE às '+ref.trim().split(' ').pop():'';
+
+  // o Lula virou? (só quando já tem voto contado)
+  if(L.v+F.v>0){
+    const lider=L.v>F.v?'lula':F.v>L.v?'flavio':ler('apuracao-lider');
+    if(ler('apuracao-lider')==='flavio'&&lider==='lula') festa(L.v-F.v,false);
+    if(lider) gravar('apuracao-lider',lider);
+  }
+}
+function estado(txt,tipo){const e=$('estado');e.hidden=!txt;e.textContent=txt||'';e.className='demo'+(tipo?' '+tipo:'');}
+
+/* ---------- busca a cada 30 s ---------- */
+let ultimo=null,buscando=false,falhas=0;
+try{ultimo=JSON.parse(ler('apuracao-ultimo')||'null');}catch(e){}
+async function atualizar(){
+  if(buscando) return; buscando=true;
+  try{
+    const [pres,gov,sen]=await Promise.all(['pres','gov','sen'].map(buscarCargo));
+    falhas=0;
+    const novo={pres,gov,sen};
+    // nunca volta pra trás: se uma resposta vier mais atrasada que a que já está na tela, mantém a da tela
+    if(ultimo) for(const k of ['pres','gov','sen']) if(ultimo[k]&&(!novo[k]||novo[k].pst<ultimo[k].pst)) novo[k]=ultimo[k];
+    ultimo=novo; gravar('apuracao-ultimo',JSON.stringify(novo));
+    desenhar(novo);
+    const pst=pres?pres.pst:0;
+    if(!pres||(!pst&&!pres.vv)) estado('Aguardando os primeiros números do TSE (previsto para as 17h). A tela atualiza sozinha.');
+    else if(pst>=100) estado('Apuração de Presidente encerrada: 100% das seções.','ok');
+    else estado('');
+  }catch(e){
+    falhas++;
+    estado(falhas>1?'Sem conexão com o TSE agora. Os números na tela são os últimos que chegaram; tentando de novo a cada 30 segundos.':'','erro');
+  }finally{buscando=false;}
+}
+if(ultimo) desenhar(ultimo); else desenhar({});
+atualizar();
+setInterval(atualizar,INTERVALO);
+document.addEventListener('visibilitychange',()=>{if(!document.hidden){atualizar();acordar();}});
+addEventListener('online',atualizar);
+
+/* ---------- tela sempre acesa (Mac ao lado da TV) ---------- */
+let trava=null;
+async function acordar(){try{if('wakeLock' in navigator&&!trava&&!document.hidden){trava=await navigator.wakeLock.request('screen');trava.addEventListener('release',()=>{trava=null;});}}catch(e){}}
+acordar();
+
+/* ---------- som "tling" (gerado na hora) ---------- */
+let ctx=null,somOn=ler('apuracao-som')==='1';
+function prepararSom(){try{ctx=ctx||new (window.AudioContext||window.webkitAudioContext)();if(ctx.state!=='running')ctx.resume();}catch(e){}}
+function tling(){
+  if(!somOn) return; prepararSom(); if(!ctx) return; const t=ctx.currentTime;
+  [[1318.5,0],[1975.5,.12]].forEach(([fr,dt])=>[1,2.76].forEach((h,j)=>{
+    const o=ctx.createOscillator(),g=ctx.createGain();o.type='sine';o.frequency.value=fr*h;
+    g.gain.setValueAtTime(0,t+dt);g.gain.linearRampToValueAtTime(j?.04:.2,t+dt+.005);g.gain.exponentialRampToValueAtTime(.0001,t+dt+(j?.4:1.4));
+    o.connect(g).connect(ctx.destination);o.start(t+dt);o.stop(t+dt+1.5);}));
+}
+function botaoSom(){$('som').classList.toggle('on',somOn);$('som').querySelector('span').textContent=somOn?'Som ligado':'Ligar som';$('som').querySelector('em').textContent=somOn?'Som ligado':'Som';}
+$('som').onclick=()=>{somOn=!somOn;gravar('apuracao-som',somOn?'1':'0');botaoSom();if(somOn){prepararSom();tling();}};
+// o navegador só libera som depois de um toque: o primeiro toque em qualquer lugar já destrava
+addEventListener('pointerdown',()=>{if(somOn)prepararSom();},{once:true});
+addEventListener('keydown',()=>{if(somOn)prepararSom();},{once:true});
+botaoSom();
+
+/* ---------- festa: aviso + papel picado ---------- */
+const cv=$('confete'),cx=cv.getContext('2d');let pecas=[],anim=null;
+function tam(){cv.width=innerWidth*devicePixelRatio;cv.height=innerHeight*devicePixelRatio;}addEventListener('resize',tam);tam();
+function festa(dif,teste){
+  tling();
+  $('toastTit').textContent=teste?'Teste: Lula passou na frente':'Lula passou na frente';
+  $('toastTx').textContent=dif>0?`Agora está ${ni(dif)} votos à frente de Flávio Bolsonaro`:'Assim vai ser quando ele virar';
+  const t=$('toast');t.classList.add('on');clearTimeout(festa.t);festa.t=setTimeout(()=>t.classList.remove('on'),6000);
+  if(matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+  const cores=['#D60828','#F06A7E','#E8B54A','#F5D98B','#FFFFFF','#C4170C'],W=cv.width,H=cv.height,d=devicePixelRatio;
+  for(let i=0;i<240;i++){const da=Math.random()<.5,a=da?Math.PI+.35+Math.random()*.7:-.35-Math.random()*.7,v=(10+Math.random()*13)*d;
+    pecas.push({x:da?W:0,y:H*.8,vx:Math.cos(a)*v,vy:-Math.abs(Math.sin(a)*v)-7*d,r:Math.random()*6,vr:(Math.random()-.5)*.3,w:(5+Math.random()*6)*d,h:(3+Math.random()*4)*d,c:cores[i%cores.length],vida:1});}
+  if(!anim)loop();
+}
+function loop(){cx.clearRect(0,0,cv.width,cv.height);pecas=pecas.filter(p=>p.vida>0&&p.y<cv.height+30);
+  for(const p of pecas){p.vy+=.3*devicePixelRatio;p.vx*=.985;p.x+=p.vx;p.y+=p.vy;p.r+=p.vr;p.vida-=.005;
+    cx.save();cx.globalAlpha=Math.min(1,p.vida*2);cx.fillStyle=p.c;cx.translate(p.x,p.y);cx.rotate(p.r);cx.fillRect(-p.w/2,-p.h/2,p.w,p.h*Math.abs(Math.cos(p.r*2))+1);cx.restore();}
+  anim=pecas.length?requestAnimationFrame(loop):(cx.clearRect(0,0,cv.width,cv.height),null);}
+$('replay').onclick=()=>{const P=montar('pres',ultimo&&ultimo.pres),L=P.find(c=>c.n===13),F=P.find(c=>c.n===22);festa(L.v-F.v,true);};
+
+/* ---------- tema: Automático -> Claro -> Escuro ---------- */
+const TEMAS=['auto','light','dark'],NOMES={auto:'Automático',light:'Claro',dark:'Escuro'};let tema=ler('apuracao-tema')||'auto';
+function aplicaTema(){if(tema==='auto')document.documentElement.removeAttribute('data-theme');else document.documentElement.setAttribute('data-theme',tema);$('tema').querySelector('span').textContent=NOMES[tema];}
+$('tema').onclick=()=>{tema=TEMAS[(TEMAS.indexOf(tema)+1)%3];gravar('apuracao-tema',tema);aplicaTema();};aplicaTema();
+
+/* ---------- instalar como app (PWA) ---------- */
+if('serviceWorker' in navigator) addEventListener('load',()=>navigator.serviceWorker.register('sw.js').catch(()=>{}));
+</script>
+</body>
+</html>
