@@ -246,9 +246,21 @@ export function mostrarLogin(supabase, { iconeHtml, aoEntrar }){
       if(entrada){ entrada.value = ''; entrada.dispatchEvent(new Event('input')); entrada.focus(); }
       return;
     }
+    entrar();
+  }
+
+  // entrou (aqui pelo codigo, ou em OUTRA aba pelo link do e-mail): abre o app.
+  // O Supabase avisa as outras abas do mesmo navegador quando alguem entra.
+  let entrou = false;
+  function entrar(){
+    if(entrou) return;
+    entrou = true;
     limparPendente();
     aoEntrar();
   }
+  supabase.auth.onAuthStateChange((evento, sessao) => {
+    if(evento === 'SIGNED_IN' && sessao) entrar();
+  });
 
   esqueleto();
   if(passo === 'codigo') restante = 0; // voltou pro app depois de pedir: deixa reenviar
