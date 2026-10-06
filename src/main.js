@@ -3,6 +3,7 @@
    ============================================================ */
 import { createClient } from "@supabase/supabase-js";
 import { mergeState, deepEq, diffState, pareceEstado } from "./sync.js";
+import { sessaoAtual, mostrarLogin, sair, emailMascarado } from "./login.js";
 
 /* ------------------------------------------------------------------ */
 /* Persistência na nuvem (Supabase) — mesmo projeto do financas-casa,  */
@@ -14,7 +15,13 @@ const SUPABASE_URL = "https://oikbmfdlhvqesbgnmeky.supabase.co";
 const SUPABASE_ANON_KEY =
   "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im9pa2JtZmRsaHZxZXNiZ25tZWt5Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODkyMjUxMTgsImV4cCI6MjEwNDgwMTExOH0.VRvyNxYyvkjNaBnKAsHqfDTZxSM8pd5W9k5ElqGeeF8";
 
-const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+// Login (so o dono entra). A sessao tem chave propria ("ritmo-auth"): o Oink mora
+// no mesmo endereco (joonetoo.github.io) e nao deve pegar a sessao do Ritmo.
+const LOGIN_OBRIGATORIO = true;
+let usuarioEmail = '';
+const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+  auth: { storageKey: "ritmo-auth", persistSession: true, autoRefreshToken: true, detectSessionInUrl: true },
+});
 
 window.storage = {
   // Importante: distingue "linha realmente não existe" (data null, sem
@@ -2168,6 +2175,17 @@ function renderConfig(){
       </div>`;
     }).join('')}</div>
 
+    ${LOGIN_OBRIGATORIO && usuarioEmail ? `
+    <div class="section-title">Acesso</div>
+    <div class="acesso-card">
+      <div class="acesso-linha">
+        <span class="acesso-ok"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12l5 5 9-10"/></svg></span>
+        <div class="acesso-txt"><b>Este aparelho está conectado</b><span>Entrou como ${esc(emailMascarado(usuarioEmail))}</span></div>
+        <button class="btn danger-out" data-action="sair-aparelho">Sair deste aparelho</button>
+      </div>
+      <p class="acesso-nota">Sair <b>não apaga nada</b>: seus dados ficam guardados na nuvem. Pra voltar, é só pedir um novo código por e-mail.</p>
+    </div>` : ''}
+
     <div class="section-title">Backup</div>
     <p style="color:var(--ink-soft);font-size:13px;max-width:60ch;">
       Seus dados ficam salvos automaticamente na nuvem (Supabase). Ainda assim, é uma boa ideia baixar uma cópia de tempos em tempos.
@@ -2756,6 +2774,16 @@ function onAppClickInner(e){
         render();
       });
     }
+  }
+  else if(action==='sair-aparelho'){
+    (async ()=>{
+      // garante que a ultima edicao subiu antes de sair
+      try{ if(dirty) await flushSave(); }catch(e){}
+      if(dirty){ showToast('Ainda tem uma alteração sem subir pra nuvem. Espere um instante e tente sair de novo.'); return; }
+      saindoPorAqui = true;
+      await sair(supabase);
+      location.reload();
+    })();
   }
   else if(action==='export-backup'){
     const blob = new Blob([JSON.stringify(state, null, 2)], {type:'application/json'});
@@ -3503,12 +3531,33 @@ function registrarEsqueletoOffline(){
   navigator.serviceWorker.register('./sw.js').catch(()=>{});
 }
 
-let appCarregado = false, avisoArmado = false;
+let appCarregado = false, avisoArmado = false, saindoPorAqui = false;
 async function boot(){
   registrarEsqueletoOffline();
   // o aparelho ja sabe que esta sem rede: aviso na hora (a busca na nuvem
   // tenta varias vezes e levaria ~30s pra desistir). Nada e lido nem gravado.
   if(navigator.onLine === false){ mostrarSemConexao(); return; }
+  // Porteiro: sem login, nada e lido nem gravado — so aparece a tela de entrada.
+  if(LOGIN_OBRIGATORIO){
+    const r = await Promise.race([
+      sessaoAtual(supabase),
+      new Promise(res => setTimeout(() => res({falhou: true}), 10000))
+    ]);
+    if(r.falhou){ mostrarSemConexao(); return; }
+    if(!r.sessao){
+      mostrarLogin(supabase, {
+        iconeHtml: RITMO_ICONE,
+        aoEntrar: () => { try{ history.replaceState(null, '', location.pathname + location.search); }catch(e){} location.reload(); }
+      });
+      return;
+    }
+    usuarioEmail = (r.sessao.user && r.sessao.user.email) || '';
+    // se a sessao cair com o app aberto (saiu em outro lugar, expirou de vez):
+    // volta pra tela de entrada. O que estava no aparelho fica na caixa de saida.
+    supabase.auth.onAuthStateChange((evento) => {
+      if(evento === 'SIGNED_OUT' && appCarregado && !saindoPorAqui) location.reload();
+    });
+  }
   // se a busca demorar, mostra o esqueleto piscando em vez da tela vazia;
   // se passar de 10s, o aviso sobe por cima (a busca continua por tras e,
   // se der certo, o app abre normalmente)
