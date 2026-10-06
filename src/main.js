@@ -126,7 +126,7 @@ const MESES = [
 ];
 const MES_NOME = Object.fromEntries(MESES.map(m => [m.k, m.nome]));
 
-const NOTAS_SEED = {"2025": [{"id": "2025-n0", "empresa": "TC", "data": null, "valor": 3000.0}, {"id": "2025-n1", "empresa": "WIDE", "data": null, "valor": 1725.0}, {"id": "2025-n2", "empresa": "RESULT", "data": null, "valor": 160.0}, {"id": "2025-n3", "empresa": "WIDE", "data": null, "valor": 1255.0}, {"id": "2025-n4", "empresa": "TC", "data": null, "valor": 3000.0}, {"id": "2025-n5", "empresa": "TC", "data": null, "valor": 500.0}, {"id": "2025-n6", "empresa": "TC", "data": null, "valor": 3000.0}, {"id": "2025-n7", "empresa": "WIDE", "data": null, "valor": 1510.0}, {"id": "2025-n8", "empresa": "RESULT", "data": null, "valor": 1603.33}, {"id": "2025-n9", "empresa": "WIDE", "data": null, "valor": 1260.0}, {"id": "2025-n10", "empresa": "TC", "data": null, "valor": 3000.0}, {"id": "2025-n11", "empresa": "TC", "data": null, "valor": 1800.0}, {"id": "2025-n12", "empresa": "RESULT", "data": null, "valor": 3700.0}, {"id": "2025-n13", "empresa": "WIDE", "data": null, "valor": 2527.0}, {"id": "2025-n14", "empresa": "RESULT", "data": null, "valor": 3700.0}, {"id": "2025-n15", "empresa": "WIDE", "data": null, "valor": 1715.0}, {"id": "2025-n16", "empresa": "OUTRAS", "data": null, "valor": 840.0}, {"id": "2025-n17", "empresa": "WIDE", "data": null, "valor": 1710.0}, {"id": "2025-n18", "empresa": "RESULT", "data": null, "valor": 3700.0}, {"id": "2025-n19", "empresa": "WIDE", "data": null, "valor": 3000.0}, {"id": "2025-n20", "empresa": "RESULT", "data": null, "valor": 3700.0}, {"id": "2025-n21", "empresa": "RESULT", "data": null, "valor": 3700.0}, {"id": "2025-n22", "empresa": "WIDE", "data": null, "valor": 3000.0}, {"id": "2025-n23", "empresa": "WIDE", "data": "2025-11-10", "valor": 3000.0}, {"id": "2025-n24", "empresa": "RESULT", "data": "2025-11-10", "valor": 3700.0}, {"id": "2025-n25", "empresa": "WIDE", "data": "2025-12-01", "valor": 3000.0}, {"id": "2025-n26", "empresa": "RESULT", "data": "2025-12-01", "valor": 3700.0}, {"id": "2025-n27", "empresa": "RESULT", "data": "2025-12-31", "valor": 3700.0}, {"id": "2025-n28", "empresa": "WIDE", "data": "2025-12-31", "valor": 3000.0}], "2026": [{"id": "2026-n0", "empresa": "WIDE", "data": "2026-02-01", "valor": 3000.0}, {"id": "2026-n1", "empresa": "RESULT", "data": "2026-02-01", "valor": 3700.0}, {"id": "2026-n2", "empresa": "RESULT", "data": "2026-02-11", "valor": 1480.0}, {"id": "2026-n3", "empresa": "WIDE", "data": "2026-03-02", "valor": 3000.0}, {"id": "2026-n4", "empresa": "WAD", "data": "2026-03-03", "valor": 2325.0}, {"id": "2026-n5", "empresa": "WIDE", "data": "2026-04-05", "valor": 3000.0}, {"id": "2026-n6", "empresa": "WAD", "data": "2026-04-06", "valor": 4100.0}, {"id": "2026-n7", "empresa": "WIDE", "data": "2026-05-04", "valor": 3000.0}, {"id": "2026-n8", "empresa": "WAD", "data": "2026-05-05", "valor": 3000.0}, {"id": "2026-n9", "empresa": "FÁBIO", "data": "2026-06-01", "valor": 350.0}, {"id": "2026-n10", "empresa": "WIDE", "data": "2026-06-04", "valor": 2055.0}, {"id": "2026-n11", "empresa": "WAD", "data": "2026-06-05", "valor": 3840.0}, {"id": "2026-n12", "empresa": "FÁBIO", "data": "2026-07-03", "valor": 1610.0}, {"id": "2026-n13", "empresa": "WIDE", "data": "2026-07-03", "valor": 2260.0}, {"id": "2026-n14", "empresa": "WAD", "data": "2026-07-06", "valor": 3060.0}, {"id": "2026-n15", "empresa": "FÁBIO", "data": "2026-08-04", "valor": 2450.0}, {"id": "2026-n16", "empresa": "WIDE", "data": "2026-08-04", "valor": 2660.0}, {"id": "2026-n17", "empresa": "FÁBIO", "data": "2026-09-08", "valor": 1750.0}, {"id": "2026-n18", "empresa": "WIDE", "data": "2026-09-08", "valor": 1480.0}, {"id": "2026-n19", "empresa": "WAD", "data": "2026-09-08", "valor": 2760.0}]};
+const NOTAS_SEED = {"2025": [], "2026": []};
 
 // "hoje" e o mes atual — let, porque o app fica aberto dias no celular e o
 // Painel precisa virar o dia sozinho (ver refreshToday, la embaixo)
@@ -156,10 +156,10 @@ function uid(prefix){
 function defaultState(){
   return {
     business:{
-      nomeFantasia:'Joel Neto Filmes',
-      razaoSocial:'JOEL MANOEL DA CRUZ NETO',
-      cnpj:'46.333.168/0001-10',
-      pix:'46.333.168/0001-10',
+      nomeFantasia:'',
+      razaoSocial:'',
+      cnpj:'',
+      pix:'',
       email:'',
       telefone:'',
       apelido:'' // como a saudacao do topo te chama (vazio = primeiro nome acima)
