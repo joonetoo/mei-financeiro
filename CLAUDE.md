@@ -104,7 +104,7 @@ celular, via Remote Control) deve ler este arquivo antes de agir. O código mora
 
 **Se o Joel disser que os dados sumiram/zeraram:** não entrar em pânico nem assumir perda. Checar a
 linha real via REST do Supabase, as linhas `-backup-N`, e perguntar dos arquivos exportados
-(`Ritmo - backups/` em `/Users/joelneto/Documents/CLAUDE/`, fora do repositório de propósito, porque o GitHub é público). Mês "vazio" às vezes é só um mês ainda não preenchido.
+(`Backups dos sistemas/` e `Ritmo - backups/` em `/Users/joelneto/Documents/CLAUDE/` — a nova pasta tem os backups do Ritmo e do Oink de 2026-10-06, feitos antes de trancar o banco —, fora do repositório de propósito, porque o GitHub é público). Mês "vazio" às vezes é só um mês ainda não preenchido.
 
 
 ---
@@ -282,6 +282,6 @@ _Quando o Joel trouxer uma ideia nova, anotar aqui antes de começar, e marcar q
   — especialmente `financas_casa_architecture.md` e `mei_financeiro_architecture.md`.
 - Skill de segurança de dados: `~/.claude/skills/zero-data-loss/SKILL.md`.
 - Conversas antigas fixadas no app: "App Finanças" e "App MEI".
-- Arquivos do Joel: `Ritmo - backups/` em `/Users/joelneto/Documents/CLAUDE/`. As planilhas antigas (Fábio Ortiz, WAD, Wide Media, Notas emitidas) ficam no Google Drive; o PDF "MEUS DADOS DO MEI CASO PRECISE" está em `Documents/MEI, DOCUMENTOS E NOTAS/Documentos /`.
+- Arquivos do Joel: `Backups dos sistemas/` (backups do Ritmo e do Oink, desde 2026-10-06; guardar os próximos aí) e `Ritmo - backups/` (o antigo, de 2026-09-09), ambos em `/Users/joelneto/Documents/CLAUDE/`. As planilhas antigas (Fábio Ortiz, WAD, Wide Media, Notas emitidas) ficam no Google Drive; o PDF "MEUS DADOS DO MEI CASO PRECISE" está em `Documents/MEI, DOCUMENTOS E NOTAS/Documentos /`.
 - Projeto do Oink (app de finanças pessoais): `/Users/joelneto/Documents/CLAUDE/Oink - suas contas sem susto`.
 
