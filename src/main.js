@@ -704,6 +704,19 @@ function initials(name){
   if(parts.length===1) return parts[0].slice(0,2).toUpperCase();
   return (parts[0][0]+parts[1][0]).toUpperCase();
 }
+// sigla da bolinha do cliente: as iniciais, mas se outro cliente der a mesma
+// (WAD SOCIAL e WIDE STUDIO = "WS") usa as 2 primeiras letras do 1º nome
+// (WA / WI). Só tela: nada disso é salvo.
+function primeiras2(nome){ return ((nome||'').trim().split(/\s+/)[0]||'').slice(0,2).toUpperCase(); }
+function siglaDe(cid){
+  const c = clientById(cid);
+  if(!c) return '?';
+  const s = initials(c.nome);
+  const iguais = state.clients.filter(o=>o && o.id!==cid && initials(o.nome)===s);
+  if(!iguais.length) return s;
+  const p = primeiras2(c.nome);
+  return (p.length<2 || iguais.some(o=>primeiras2(o.nome)===p)) ? s : p;
+}
 function chipClass(clientId){
   const idx = state.clientOrder.indexOf(clientId);
   return 'chip-' + (((idx<0?0:idx))%3);
@@ -1049,7 +1062,7 @@ function painelCobrar(){
       ? `<span>${MES_NOME[shiftYm(ym,-1).slice(5)]} fechado hoje · nota de <b class="sensitive">R$ ${fmtBRL(parseBRL(ant.valor))}</b></span>`
       : `<span>Fecha ${aprox ? 'por volta de' : 'dia'} <b>${ddmm(prevista)}</b></span><span>${quando}</span>`;
     return `<button type="button" class="card cob" data-action="abrir-cliente" data-client="${id}">
-      <span class="top"><span class="chip ${chipClass(id)}">${esc(initials(c.nome))}</span><span class="nm">${esc(c.nome)}</span>${pill}</span>
+      <span class="top"><span class="chip ${chipClass(id)}">${esc(siglaDe(id))}</span><span class="nm">${esc(c.nome)}</span>${pill}</span>
       <span class="per">Período de ${nomeMesYm(ym)}</span><span class="big sensitive">R$ ${fmtBRL(total)}</span>
       <span class="sub">${plural(rows.length,'vídeo','vídeos')}${desde ? ` · desde ${ddmm(desde)}` : ''}</span>
       <span class="close-l">${rodape}</span>
@@ -1304,6 +1317,31 @@ function painelMeta(ym){
     const ab = abertosDoMes(ant);
     if(ab.length) lembrete = `<button type="button" class="meta-lembra" data-action="meta-mes" data-dir="-1">${MES_NOME[ant.split('-')[1]]} ainda recebendo: ${esc(listaNomes(ab.map(nomeCurto)))} em aberto ›</button>`;
   }
+  // vídeos FEITOS neste mês (pela data) mas lançados na aba de um mês
+  // anterior: contam na meta daquele mês, não aqui. Mostra quanto e onde.
+  const fora = {v:0, n:0, clientes:[], abas:{}};
+  state.clientOrder.forEach(cid=>{
+    Object.entries(state.videos[cid]||{}).forEach(([aba, rows])=>{
+      if(!(aba < ym) || !MES_NOME[aba.slice(5)]) return;
+      (rows||[]).forEach(r=>{
+        if(!r || !r.data || r.data.slice(0,7)!==ym) return;
+        fora.v += parseBRL(r.valor); fora.n += 1;
+        fora.abas[aba] = true;
+        if(!fora.clientes.includes(cid)) fora.clientes.push(cid);
+      });
+    });
+  });
+  if(fora.n && fora.v > 0){
+    const abaFora = Object.keys(fora.abas).sort().pop();
+    const nmFora = MES_NOME[abaFora.slice(5)].toLowerCase();
+    const metaFora = metaDoMes(abaFora);
+    const fatFora = Object.values(producaoDoMes(abaFora)).reduce((s,e)=>s+e.v, 0);
+    const fechou = !abertosDoMes(abaFora).length;
+    const resumo = metaFora
+      ? ` ${MES_NOME[abaFora.slice(5)]} ${fechou ? 'fechou' : 'está'} com <span class="sensitive">R$ ${fmtBRL(fatFora)}</span> de <span class="sensitive">R$ ${fmtBRL(metaFora)}</span>.`
+      : '';
+    lembrete += `<button type="button" class="meta-fora" data-action="meta-mes" data-dir="${-ymDiff(ym, abaFora)}">Fora daqui: <b class="sensitive">R$ ${fmtBRL(fora.v)}</b> feitos em ${mesNome} foram ${Object.keys(fora.abas).length>1 ? 'pra abas de meses anteriores' : `na aba de ${nmFora}`} (${plural(fora.n,'vídeo','vídeos')}, ${esc(listaNomes(fora.clientes.map(nomeCurto)))}).${resumo} ›</button>`;
+  }
   if(ui.metaEditing){
     return `<div class="card card-meta s4">${head()}
       <form class="meta-form" data-meta-form>
@@ -1402,9 +1440,29 @@ function painelSemana(porData){
   }).join('');
   const intervalo = seg.slice(5,7)===dom.slice(5,7) ? `${seg.slice(8,10)} a ${ddmm(dom)}` : `${ddmm(seg)} a ${ddmm(dom)}`;
   const passadaLabel = idxHoje===6 ? 'Semana passada' : `Semana passada até ${DIA_SEMANA_LONGO[idxHoje]}`;
+  // a semana conta pela DATA; a meta, pela ABA. Quando os vídeos da semana
+  // estão em abas de meses diferentes, mostra quanto foi pra cada uma.
+  const porAba = {};
+  state.clientOrder.forEach(cid=>{
+    Object.entries(state.videos[cid]||{}).forEach(([aba, rows])=>(rows||[]).forEach(r=>{
+      if(!r || !r.data || r.data < seg || r.data > dom) return;
+      porAba[aba] = (porAba[aba]||0) + parseBRL(r.valor);
+    }));
+  });
+  const abas = Object.keys(porAba).filter(k=>porAba[k]>0 && MES_NOME[k.slice(5)]).sort().reverse();
+  let divisao = '';
+  if(abas.length > 1 && total > 0){
+    const atualYm = monthKey(REAL_YEAR, REAL_MONTH);
+    const faixa = abas.map((k,i)=>`<i class="${i===0?'a':'b'}" style="flex:${porAba[k]}"></i>`).join('');
+    const txt = abas.map(k=>{
+      const nm = MES_NOME[k.slice(5)].toLowerCase();
+      return `<span><b class="sensitive">R$ ${fmtBRL(porAba[k])}</b> ${k===atualYm ? `na meta de ${nm}` : `nas abas de ${nm}`}</span>`;
+    }).join('');
+    divisao = `<div class="wk-split" aria-hidden="true">${faixa}</div><p class="wk-split-t">${txt}</p>`;
+  }
   return `<div class="card card-week s8">
     <div class="left"><span class="label">Esta semana${novoTag()}</span><span class="big sensitive">R$ ${fmtBRL(total)}</span>
-    <p class="sub">${intervalo} · ${plural(n,'vídeo','vídeos')}</p><p class="sub">${passadaLabel}: <b class="sensitive">R$ ${fmtBRL(passada)}</b></p></div>
+    <p class="sub">${intervalo} · ${plural(n,'vídeo','vídeos')}</p><p class="sub">${passadaLabel}: <b class="sensitive">R$ ${fmtBRL(passada)}</b></p>${divisao}</div>
     <div class="wbars" role="img" aria-label="Faturamento por dia desta semana">${bars}</div>
   </div>`;
 }
@@ -1589,7 +1647,7 @@ function painelClientes(ym){
   const tot = lista.reduce((s,c)=>s+c.v, 0), max = lista[0].v;
   const stack = lista.map(c=>`<i class="${chipClass(c.id)}" style="flex:${c.v}"></i>`).join('');
   const rows = lista.map(c=>`<div class="cl">
-    <span class="chip ${chipClass(c.id)}">${esc(initials(c.nome))}</span>
+    <span class="chip ${chipClass(c.id)}">${esc(siglaDe(c.id))}</span>
     <span class="n">${esc(c.nome)}</span><span class="v sensitive">R$ ${fmtBRL(c.v)}</span>
     <span class="track"><i class="${chipClass(c.id)}" style="width:${(c.v/max*100).toFixed(1)}%"></i></span>
     <span class="meta-l">${plural(c.n,'vídeo','vídeos')} · ${(c.v/tot*100).toFixed(0)}%</span>
@@ -1645,15 +1703,17 @@ function painelRecentes(){
   state.clientOrder.forEach(cid=>{
     const meses = state.videos[cid];
     if(!meses) return;
-    Object.values(meses).forEach(rows=>(rows||[]).forEach(r=>{ if(r) todos.push({cid, r}); }));
+    Object.entries(meses).forEach(([aba, rows])=>(rows||[]).forEach(r=>{ if(r) todos.push({cid, aba, r}); }));
   });
   // mais recente primeiro: pela data do vídeo e, no mesmo dia, pelo último lançado
   todos.sort((a,b)=> String(b.r.data||'').localeCompare(String(a.r.data||'')) || String(b.r.id).localeCompare(String(a.r.id)));
-  const rows = todos.slice(0,6).map(({cid, r})=>{
-    const c = clientById(cid);
-    const sub = [r.subcliente ? esc(r.subcliente) : '', r.data ? ddmm(r.data) : 'sem data'].filter(Boolean).join(' · ');
+  const rows = todos.slice(0,6).map(({cid, aba, r})=>{
+    // vídeo lançado na aba de outro mês (ex.: feito 04/11, na aba de outubro): avisa
+    const outraAba = r.data && aba && /^\d{4}-\d{2}$/.test(aba) && r.data.slice(0,7)!==aba && MES_NOME[aba.slice(5)]
+      ? `aba ${MES_NOME[aba.slice(5)].slice(0,3).toLowerCase()}.` : '';
+    const sub = [r.subcliente ? esc(r.subcliente) : '', r.data ? ddmm(r.data) : 'sem data', outraAba].filter(Boolean).join(' · ');
     return `<div class="rv">
-      <span class="chip ${chipClass(cid)}">${esc(initials(c ? c.nome : ''))}</span><span class="t">${esc(r.headline || 'Sem título')}</span><span class="v sensitive">R$ ${fmtBRL(parseBRL(r.valor))}</span>
+      <span class="chip ${chipClass(cid)}">${esc(siglaDe(cid))}</span><span class="t">${esc(r.headline || 'Sem título')}</span><span class="v sensitive">R$ ${fmtBRL(parseBRL(r.valor))}</span>
       <span class="s">${sub}</span>
     </div>`;
   }).join('');
@@ -1770,7 +1830,7 @@ function renderRail(){
     if(!c) return;
     const active = ui.tab===id;
     html += `<button class="tab-btn ${active?'active':''}" data-action="switch-tab" data-tab="${id}">
-      <span class="tab-chip ${chipClass(id)}">${esc(initials(c.nome))}</span>
+      <span class="tab-chip ${chipClass(id)}">${esc(siglaDe(id))}</span>
       <span class="tab-label">${esc(c.nome)}</span>
     </button>`;
   });
@@ -1980,7 +2040,7 @@ function renderClientPanel(clientId){
   return `
     <div class="lc-card lc-head">
       <div class="lc-cli">
-        <span class="lc-chip ${chipClass(clientId)}">${esc(initials(c.nome))}</span>
+        <span class="lc-chip ${chipClass(clientId)}">${esc(siglaDe(clientId))}</span>
         <div class="lc-nome"><div class="panel-title">${esc(c.nome)}${isEsp?' <span class="tipo-badge">esporádico</span>':''}</div></div>
         <div class="year-switch lc-ano">
           <button data-action="year-step" data-client="${clientId}" data-dir="-1" aria-label="Ano anterior">‹</button>
@@ -2092,7 +2152,7 @@ function renderConfig(){
     const armed = isArmed('client-'+id);
     const isEsp = c.tipo==='esporadico';
     clientsHtml += `<div class="client-mgmt-row">
-      <div class="client-avatar ${chipClass(id)}">${esc(initials(c.nome))}</div>
+      <div class="client-avatar ${chipClass(id)}">${esc(siglaDe(id))}</div>
       <input type="text" value="${esc(c.nome)}" data-role="client-field" data-client="${id}" data-field="nome">
       ${isEsp
         ? `<span class="tipo-badge" title="Cliente esporádico, sem valor padrão a cada lançamento">esporádico</span>`
@@ -2144,7 +2204,7 @@ function renderConfig(){
       const opts = ['<option value="0"'+(dia===0?' selected':'')+'>último dia do mês</option>']
         .concat(Array.from({length:31},(_,i)=>`<option value="${i+1}"${dia===i+1?' selected':''}>dia ${i+1} do mês seguinte</option>`)).join('');
       return `<div class="client-mgmt-row fecha-row">
-        <div class="client-avatar ${chipClass(id)}">${esc(initials(c.nome))}</div>
+        <div class="client-avatar ${chipClass(id)}">${esc(siglaDe(id))}</div>
         <span class="fecha-nome">${esc(c.nome)}</span>
         <select data-role="client-fecha" data-client="${id}" aria-label="Quando ${esc(c.nome)} costuma fechar">${opts}</select>
       </div>`;
@@ -2169,7 +2229,7 @@ function renderConfig(){
       const c = clientById(id);
       if(!c) return '';
       return `<div class="client-mgmt-row fecha-row">
-        <div class="client-avatar ${chipClass(id)}">${esc(initials(c.nome))}</div>
+        <div class="client-avatar ${chipClass(id)}">${esc(siglaDe(id))}</div>
         <span class="fecha-nome">${esc(c.nome)}</span>
         <input class="sensitive cnpj-in" type="text" inputmode="numeric" autocomplete="off" placeholder="00.000.000/0001-00" value="${esc(c.cnpj||'')}" data-role="client-cnpj" data-client="${id}" aria-label="CNPJ de ${esc(c.nome)}">
       </div>`;

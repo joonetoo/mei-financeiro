@@ -141,6 +141,8 @@ em cada cliente e tudo junto lá em cima"*.
 É o valor que ele precisa pra pagar as contas do mês (R$ 6.000 no início; setembro/2026 = R$ 7.500).
 Desde 2026-10-01 conta pela **aba do mês** em que o vídeo foi lançado (pedido do Joel: enquanto WAD/Wide não fecham setembro, o que ele lança nas abas de setembro conta em setembro, mesmo com data de outubro). O cartão tem setas ‹ › (`ui.metaYm`, só tela) e o "Por cliente" acompanha o mês escolhido; mês passado mostra "Ainda recebendo"/"Mês encerrado" e o mês atual avisa "Setembro ainda recebendo: … ›". Editar a meta vale pro mês mostrado. Gráficos de dia/semana seguem pela data do vídeo.
 
+**Meta × semana (2026-11-05):** a meta soma pela ABA, "Esta semana" pela DATA. Quando os vídeos da semana estão em abas de meses diferentes, o cartão da semana mostra a divisão (`.wk-split`); o cartão da meta mostra "Fora daqui: R$ X feitos em <mês> foram na aba de <mês anterior>" (`.meta-fora`, leva pro mês da aba); os últimos vídeos marcam "aba out." Siglas: `siglaDe(cid)` usa as 2 primeiras letras do 1º nome quando dois clientes dariam a mesma sigla (WAD SOCIAL → WA, WIDE STUDIO → WI). Mockup: https://claude.ai/artifact/KpwNaJZRLg47XHg2urduqR
+
 **Períodos de cobrança por cliente (desde 2026-09-25):** mockup https://claude.ai/artifact/A6vsTT8nfzLKY9NPbzrUeD
 - Fábio: dia 01 ao último dia do mês. Wide: dia 05 ao dia 04. WAD: ~08 ao 08, mas varia (07/08/09).
 - "Fechar" um cliente = emitir e enviar a nota **na hora**; só depois ele começa a lançar no mês seguinte.
