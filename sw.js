@@ -8,12 +8,16 @@
    - Pagina (index.html): sempre busca a versao nova primeiro; a copia so
      entra quando a rede falha. Assim cada publicacao chega na hora.
    - Arquivos do app (/assets com nome que muda a cada versao, icones):
-     usa a copia se tiver, senao busca e guarda.
-   - Fontes do Google e o jsPDF: usa a copia e atualiza por tras.
+     usa a copia se tiver, senao busca e guarda. O gerador de PDF (jsPDF)
+     agora e um desses arquivos: a pagina aponta pra ele (link "prefetch"),
+     entao ele e guardado junto e o PDF sai mesmo sem internet.
+   - Fontes do Google: usa a copia e atualiza por tras.
    O real (/mei-financeiro/) e o beta (/mei-beta/) moram no mesmo endereco,
    entao o nome da copia leva a pasta de cada um.
    ============================================================ */
-const VERSAO = 1;
+// 2 (2026-11): o jsPDF saiu do site de fora (cdnjs) e veio pra dentro do app;
+// trocar o numero joga fora a copia antiga, que ainda guardava os de la
+const VERSAO = 2;
 const ESCOPO = new URL(self.registration.scope).pathname;
 const PREFIXO = 'ritmo-esqueleto:' + ESCOPO + ':';
 const CACHE = PREFIXO + VERSAO;
@@ -66,7 +70,7 @@ self.addEventListener('activate', ev => {
 });
 
 function ehDeFora(u){
-  return u.hostname === 'fonts.googleapis.com' || u.hostname === 'fonts.gstatic.com' || u.hostname === 'cdnjs.cloudflare.com';
+  return u.hostname === 'fonts.googleapis.com' || u.hostname === 'fonts.gstatic.com';
 }
 
 self.addEventListener('fetch', ev => {
@@ -106,7 +110,7 @@ self.addEventListener('fetch', ev => {
     return;
   }
 
-  // icones, manifest, fontes e jsPDF: copia na hora, atualiza por tras
+  // icones, manifest e fontes: copia na hora, atualiza por tras
   if((u.origin === self.location.origin && u.pathname.startsWith(ESCOPO)) || ehDeFora(u)){
     ev.respondWith((async () => {
       const cache = await caches.open(CACHE);
