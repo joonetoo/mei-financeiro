@@ -4,6 +4,9 @@
 import { createClient } from "@supabase/supabase-js";
 import { mergeState, deepEq, diffState, pareceEstado } from "./sync.js";
 import { sessaoAtual, mostrarLogin, sair, emailMascarado } from "./login.js";
+import * as P from "./puro.js";
+import { localISO, addDays, shiftYm, ymDiff, parseBRL, centavos, esc, initials } from "./puro.js";
+import { criarFetchComLimite, comLimite, LIMITE_LEITURA_MS, LIMITE_GRAVACAO_MS, FOLGA_MS } from "./rede.js";
 
 /* ------------------------------------------------------------------ */
 /* Persistência na nuvem (Supabase) — mesmo projeto do financas-casa,  */
@@ -19,9 +22,18 @@ const SUPABASE_ANON_KEY =
 // no mesmo endereco (joonetoo.github.io) e nao deve pegar a sessao do Ritmo.
 const LOGIN_OBRIGATORIO = true;
 let usuarioEmail = '';
+// Cada pedido de DADOS tem prazo (15 s pra ler, 25 s pra gravar): com sinal
+// ruim o pedido ficava pendurado, o app travava em "salvando…" e nada mais
+// sincronizava. Estourou o prazo = erro comum (avisa e tenta de novo em 5 s).
+// Os pedidos de login nao tem prazo (ver rede.js).
 const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
   auth: { storageKey: "ritmo-auth", persistSession: true, autoRefreshToken: true, detectSessionInUrl: true },
+  global: { fetch: criarFetchComLimite((...args) => fetch(...args)) },
 });
+// segunda trava, por fora do pedido (cobre a renovacao do login travada antes
+// do pedido sair): estourou, lanca erro
+const lendo = q => comLimite(q, LIMITE_LEITURA_MS + FOLGA_MS);
+const gravando = q => comLimite(q, LIMITE_GRAVACAO_MS + FOLGA_MS);
 
 window.storage = {
   // Importante: distingue "linha realmente não existe" (data null, sem
@@ -31,11 +43,11 @@ window.storage = {
   // (já aconteceu no financas-casa, que usa o mesmo padrão de código).
   async get(key) {
     try {
-      const { data, error } = await supabase
+      const { data, error } = await lendo(supabase
         .from("app_data")
         .select("data, updated_at")
         .eq("id", key)
-        .maybeSingle();
+        .maybeSingle());
       if (error) return { failed: true };
       if (!data) return { value: null };
       // linha existe mas sem conteudo valido: trata como FALHA, nunca como
@@ -51,11 +63,11 @@ window.storage = {
   // aparelho salvou algo desde a ultima vez que este leu
   async getStamp(key) {
     try {
-      const { data, error } = await supabase
+      const { data, error } = await lendo(supabase
         .from("app_data")
         .select("updated_at")
         .eq("id", key)
-        .maybeSingle();
+        .maybeSingle());
       if (error) return { failed: true };
       return { updatedAt: data ? data.updated_at : null };
     } catch (e) {
@@ -70,9 +82,9 @@ window.storage = {
     const parsed = JSON.parse(value);
     if (!esperado) {
       // linha ainda nao existe (primeiro uso): cria; se alguem criou antes, e conflito
-      const { error } = await supabase
+      const { error } = await gravando(supabase
         .from("app_data")
-        .insert({ id: key, data: parsed, updated_at: novoCarimbo });
+        .insert({ id: key, data: parsed, updated_at: novoCarimbo }));
       if (error) {
         if (error.code === "23505") return { conflict: true };
         console.error("Falha ao salvar no Supabase", error);
@@ -80,12 +92,12 @@ window.storage = {
       }
       return { ok: true, updatedAt: novoCarimbo };
     }
-    const { data, error } = await supabase
+    const { data, error } = await gravando(supabase
       .from("app_data")
       .update({ data: parsed, updated_at: novoCarimbo })
       .eq("id", key)
       .eq("updated_at", esperado)
-      .select("updated_at");
+      .select("updated_at"));
     if (error) {
       console.error("Falha ao salvar no Supabase", error);
       throw error;
@@ -95,29 +107,29 @@ window.storage = {
     // proxima gravacao vai se comparar
     return { ok: true, updatedAt: data[0].updated_at || novoCarimbo };
   },
-  // Lança erro se a gravação falhar — quem chama precisa saber, senão o app
-  // mostra "salvo" com a edição ainda só na memória do aparelho.
   // existe alguma linha cujo id comeca com `prefixo`? (backups, copias)
   async existeComPrefixo(prefixo) {
-    const { data, error } = await supabase
+    const { data, error } = await lendo(supabase
       .from("app_data")
       .select("id")
       .like("id", prefixo + "%")
-      .limit(1);
+      .limit(1));
     if (error) throw error;
     return !!(data && data.length);
   },
   // "Cofre": tabela app_historico, onde o app so consegue ACRESCENTAR (nunca
   // mudar nem apagar). Guarda o que mudou em cada gravacao + uma foto por dia.
   async historico(linhas) {
-    const { error } = await supabase.from("app_historico").insert(linhas);
+    const { error } = await gravando(supabase.from("app_historico").insert(linhas));
     if (error) throw error;
   },
+  // Lança erro se a gravação falhar — quem chama precisa saber, senão o app
+  // mostra "salvo" com a edição ainda só na memória do aparelho.
   async set(key, value) {
     const parsed = JSON.parse(value);
-    const { error } = await supabase
+    const { error } = await gravando(supabase
       .from("app_data")
-      .upsert({ id: key, data: parsed, updated_at: new Date().toISOString() });
+      .upsert({ id: key, data: parsed, updated_at: new Date().toISOString() }));
     if (error) {
       console.error("Falha ao salvar no Supabase", error);
       throw error;
@@ -140,11 +152,7 @@ const NOTAS_SEED = {"2025": [], "2026": []};
 let now = new Date();
 let REAL_YEAR = String(now.getFullYear());
 let REAL_MONTH = String(now.getMonth()+1).padStart(2,'0');
-// data LOCAL (nao toISOString, que e UTC): depois das 21h no Brasil o UTC ja
-// virou o dia seguinte, e o video lancado a noite caia com a data de amanha.
-function localISO(d){
-  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
-}
+// (localISO — data LOCAL, nunca UTC — mora no puro.js)
 let TODAY_ISO = localISO(now);
 function refreshToday(){
   const d = new Date();
@@ -226,12 +234,23 @@ function outboxKey(){ return LS.outbox + TAB_ID; }
 // a "base" (versao da nuvem) fica numa chave propria e so e regravada quando
 // muda — assim cada tecla digitada copia so o estado, nao os dois
 let baseNaCaixa = null;
+// true = a ultima edicao NAO coube/nao pode ser guardada no aparelho (memoria
+// do navegador cheia ou bloqueada): ela so existe na tela ate a nuvem
+// confirmar. O indicador de salvamento avisa (ver textoDoIndicador).
+let caixaFalhou = false;
 function writeOutbox(){
-  if(!state) return;
-  if(baseNaCaixa !== baseJson){ lsSet(outboxKey() + ':base', baseJson || ''); baseNaCaixa = baseJson; }
-  lsSet(outboxKey(), JSON.stringify({ t: Date.now(), baseAt: lastSyncedAt, state: JSON.stringify(state) }));
+  if(!state) return true;
+  let ok = true;
+  if(baseNaCaixa !== baseJson){
+    if(lsSet(outboxKey() + ':base', baseJson || '')) baseNaCaixa = baseJson;
+    else ok = false;
+  }
+  if(!lsSet(outboxKey(), JSON.stringify({ t: Date.now(), baseAt: lastSyncedAt, state: JSON.stringify(state) }))) ok = false;
+  if(!ok && !caixaFalhou) console.warn('Caixa de saída: não consegui guardar a edição neste aparelho (memória do navegador cheia ou bloqueada).');
+  caixaFalhou = !ok;
+  return ok;
 }
-function clearOutbox(){ lsDel(outboxKey()); lsDel(outboxKey() + ':base'); baseNaCaixa = null; }
+function clearOutbox(){ lsDel(outboxKey()); lsDel(outboxKey() + ':base'); baseNaCaixa = null; caixaFalhou = false; }
 function readAllOutboxes(){
   const out = [];
   try{
@@ -267,7 +286,7 @@ function registrarHistorico(linha){
   fila.push({ ...linha, chave: STORAGE_KEY, aparelho: APARELHO, quando: new Date().toISOString() });
   // fila limitada (se ficar dias sem rede, as mais antigas cedem lugar)
   while(fila.length > 200) fila.shift();
-  lsSet(LS.histFila, JSON.stringify(fila));
+  if(!lsSet(LS.histFila, JSON.stringify(fila))) console.warn('Cofre: não consegui guardar o registro na fila deste aparelho.');
   enviarHistorico();
 }
 async function enviarHistorico(){
@@ -285,7 +304,7 @@ async function enviarHistorico(){
     await window.storage.historico(fila);
     const resto = filaHist().slice(fila.length); // o que entrou enquanto enviava
     lsSet(LS.histFila, JSON.stringify(resto));
-  }catch(e){ /* fica na fila, vai na proxima */ }
+  }catch(e){ console.warn('Cofre: não consegui enviar o registro agora — fica na fila e vai na próxima.', e); }
   finally{ histEnviando = false; lsDel(LS.histFila + ':trava'); }
 }
 function historicoDaGravacao(antesJson, depoisJson){
@@ -400,30 +419,31 @@ async function recuperarCaixaDeSaida(nuvem){
 }
 let caixasParaLimpar = [];
 
-function migrateState(){
+// `st` = o que migrar (o estado do app, ou um backup ainda nao aplicado)
+function migrateState(st = state){
   // ensure new fields exist if state was saved by an older version
   const d = defaultState();
-  if(!state.business) state.business = d.business;
-  for(const k in d.business){ if(state.business[k]===undefined) state.business[k]=d.business[k]; }
-  if(state.meiLimiteAnual===undefined) state.meiLimiteAnual = d.meiLimiteAnual;
-  if(!state.clients) state.clients = d.clients;
-  state.clients.forEach(c=>{ if(!c.tipo) c.tipo = 'fixo'; });
+  if(!st.business) st.business = d.business;
+  for(const k in d.business){ if(st.business[k]===undefined) st.business[k]=d.business[k]; }
+  if(st.meiLimiteAnual===undefined) st.meiLimiteAnual = d.meiLimiteAnual;
+  if(!st.clients) st.clients = d.clients;
+  st.clients.forEach(c=>{ if(!c.tipo) c.tipo = 'fixo'; });
   // dia em que o cliente costuma fechar (so estimativa no Painel): 0 = ultimo dia do mes
   const DIA_FECHA_PADRAO = {fabio:0, wide:4, wad:8};
-  state.clients.forEach(c=>{ if(c.diaFechamento===undefined) c.diaFechamento = DIA_FECHA_PADRAO[c.id] ?? 0; });
+  st.clients.forEach(c=>{ if(c.diaFechamento===undefined) c.diaFechamento = DIA_FECHA_PADRAO[c.id] ?? 0; });
   // CNPJ do cliente (so pra copiar na hora de emitir a nota; campo novo, so acrescenta)
-  state.clients.forEach(c=>{ if(c.cnpj===undefined) c.cnpj = ''; });
-  if(!state.clientOrder) state.clientOrder = state.clients.map(c=>c.id);
-  if(!state.videos) state.videos = {};
-  if(!state.notas) state.notas = d.notas;
-  if(!state.notasYears) state.notasYears = Object.keys(state.notas).sort();
+  st.clients.forEach(c=>{ if(c.cnpj===undefined) c.cnpj = ''; });
+  if(!st.clientOrder) st.clientOrder = st.clients.map(c=>c.id);
+  if(!st.videos) st.videos = {};
+  if(!st.notas) st.notas = d.notas;
+  if(!st.notasYears) st.notasYears = Object.keys(st.notas).sort();
   // meta de faturamento, uma por mes ("2026-09": 6000). Campo novo, so
   // acrescenta — nada do que ja existe e alterado.
-  if(!state.metas || typeof state.metas!=='object') state.metas = {[monthKey(REAL_YEAR, REAL_MONTH)]: 6000};
+  if(!st.metas || typeof st.metas!=='object') st.metas = {[monthKey(REAL_YEAR, REAL_MONTH)]: 6000};
   // dia em que cada periodo de cobranca foi fechado (campo novo, so acrescenta)
-  if(!state.fechamentos || typeof state.fechamentos!=='object') state.fechamentos = {};
+  if(!st.fechamentos || typeof st.fechamentos!=='object') st.fechamentos = {};
   // orcamentos (2026-09-29): lista nova, so acrescenta
-  if(!Array.isArray(state.orcamentos)) state.orcamentos = [];
+  if(!Array.isArray(st.orcamentos)) st.orcamentos = [];
 }
 
 // Fila serializada de gravação: só existe uma gravação em andamento por vez;
@@ -497,7 +517,11 @@ async function juntarComNuvem(){
   if(res.failed || !res.value) throw new Error('nuvem-indisponivel');
   const nuvem = JSON.parse(res.value);
   if(!pareceEstado(nuvem)) throw new Error('nuvem-invalida');
-  if(!baseJson){
+  // uma gravação DESTA aba chegou lá, só a resposta se perdeu (ou o prazo do
+  // pedido estourou com ele já entregue): a nuvem está igual a algo que esta
+  // aba mandou
+  const foiDaqui = enviadasSemResposta.some(j => deepEq(nuvem, JSON.parse(j)));
+  if(!baseJson && !foiDaqui){
     // sem base (primeiro uso, a linha foi criada por outro aparelho nesse
     // meio-tempo): juntar "no chute" faria o estado-semente daqui ganhar da
     // nuvem. Guarda o daqui à parte e fica com a da nuvem.
@@ -510,10 +534,9 @@ async function juntarComNuvem(){
     renderPreserveFocus();
     return;
   }
-  let base = JSON.parse(baseJson);
-  // uma gravação DESTA aba chegou lá, só a resposta se perdeu: a base passa a
-  // ser ela (senão pareceria que "o outro aparelho" mudou)
-  if(enviadasSemResposta.some(j => deepEq(nuvem, JSON.parse(j)))) base = nuvem;
+  // foi esta aba que gravou: a base passa a ser a nuvem (senão pareceria que
+  // "o outro aparelho" mudou)
+  const base = foiDaqui ? nuvem : JSON.parse(baseJson);
   enviadasSemResposta = [];
   let { conflitos } = mergeState(base, state, nuvem);
   if(conflitos.length){
@@ -556,9 +579,9 @@ function renderQuandoPuder(){
 }
 
 async function guardarCopia(json, motivo){
-  const d = new Date();
-  const hora = `${String(d.getHours()).padStart(2,'0')}${String(d.getMinutes()).padStart(2,'0')}${String(d.getSeconds()).padStart(2,'0')}`;
-  const idCopia = `${STORAGE_KEY}-conflito-${localISO(d)}-${hora}`;
+  // o rabicho sorteado no fim impede que duas copias do mesmo segundo caiam
+  // na mesma linha (a segunda apagaria a primeira)
+  const idCopia = P.idDaCopia(STORAGE_KEY, new Date(), P.rabichoSorteado());
   await window.storage.set(idCopia, json);
   registrarHistorico({ acao: 'conflito', resumo: `${motivo}: cópia guardada em ${idCopia}` });
   return idCopia;
@@ -660,27 +683,23 @@ function setSaveIndicator(mode){
   saveMode = mode;
   const el = document.getElementById('savestate');
   if(!el) return;
-  if(mode==='saving'){ el.textContent='salvando…'; el.classList.add('saving'); el.classList.remove('error'); }
-  else if(mode==='saved'){ el.textContent='salvo'; el.classList.remove('saving','error'); }
-  else { el.textContent='erro ao salvar — verifique a conexão'; el.classList.remove('saving'); el.classList.add('error'); }
+  el.textContent = textoDoIndicador();
+  el.classList.toggle('saving', mode==='saving' && !caixaFalhou);
+  el.classList.toggle('error', indicadorEmAlerta());
+}
+// Enquanto a edicao nao pode ser guardada no aparelho (caixaFalhou) e a nuvem
+// ainda nao confirmou, o indicador fica em alerta (o mesmo vermelho do erro,
+// que tambem aparece no celular) pedindo pra nao fechar o app.
+function indicadorEmAlerta(){ return saveMode==='error' || (caixaFalhou && saveMode!=='saved'); }
+function textoDoIndicador(){
+  const semCopia = caixaFalhou ? ' · sem cópia neste aparelho: não feche o app até aparecer “salvo”' : '';
+  if(saveMode==='saving') return 'salvando…' + semCopia;
+  if(saveMode==='saved') return 'salvo';
+  return 'erro ao salvar — verifique a conexão' + semCopia;
 }
 
 /* ---------------- helpers ---------------- */
-function parseBRL(v){
-  if(typeof v === 'number') return isNaN(v) ? 0 : v;
-  let s = String(v==null?'':v).trim();
-  if(s==='') return 0;
-  s = s.replace(/[^0-9.,-]/g,'');
-  if(s.includes(',')){
-    s = s.replace(/\./g,'').replace(',', '.');
-  } else if(/^-?\d{1,3}(\.\d{3})+$/.test(s)){
-    // "1.500" ou "12.000" sem virgula: o ponto e de milhar (jeito brasileiro),
-    // nao decimal — antes virava R$ 1,50
-    s = s.replace(/\./g,'');
-  }
-  const n = parseFloat(s);
-  return isNaN(n) ? 0 : n;
-}
+// (parseBRL mora no puro.js)
 function fmtBRL(n){
   const num = typeof n === 'number' ? (isNaN(n)?0:n) : parseBRL(n);
   return num.toLocaleString('pt-BR', {minimumFractionDigits:2, maximumFractionDigits:2});
@@ -698,25 +717,8 @@ function fmtDateBR(iso){
 }
 function clientById(id){ return state.clients.find(c=>c.id===id); }
 function monthKey(year, m){ return `${year}-${m}`; }
-function initials(name){
-  const parts = (name||'').trim().split(/\s+/).filter(Boolean);
-  if(parts.length===0) return '?';
-  if(parts.length===1) return parts[0].slice(0,2).toUpperCase();
-  return (parts[0][0]+parts[1][0]).toUpperCase();
-}
-// sigla da bolinha do cliente: as iniciais, mas se outro cliente der a mesma
-// (WAD SOCIAL e WIDE STUDIO = "WS") usa as 2 primeiras letras do 1º nome
-// (WA / WI). Só tela: nada disso é salvo.
-function primeiras2(nome){ return ((nome||'').trim().split(/\s+/)[0]||'').slice(0,2).toUpperCase(); }
-function siglaDe(cid){
-  const c = clientById(cid);
-  if(!c) return '?';
-  const s = initials(c.nome);
-  const iguais = state.clients.filter(o=>o && o.id!==cid && initials(o.nome)===s);
-  if(!iguais.length) return s;
-  const p = primeiras2(c.nome);
-  return (p.length<2 || iguais.some(o=>primeiras2(o.nome)===p)) ? s : p;
-}
+// sigla da bolinha do cliente (regra no puro.js). Só tela: nada disso é salvo.
+function siglaDe(cid){ return P.siglaDe(state.clients, cid); }
 function chipClass(clientId){
   const idx = state.clientOrder.indexOf(clientId);
   return 'chip-' + (((idx<0?0:idx))%3);
@@ -841,7 +843,6 @@ let ui = {
   ordemDesc: lsGet(`ritmo-ordem:${STORAGE_KEY}`)==='desc', // true = mais recentes primeiro (so tela)
   cal: null, // calendario aberto: {tipo:'video'|'nota', client, ym, year, row, mes:'AAAA-MM'}
   fecharJanela: null, // {cid, ym, etapa:'dados'|'feito'} enquanto a janela de fechar periodo esta aberta
-  confirmClose: null, // 'clientId|ym' enquanto a confirmacao de fechar periodo esta aberta
   tab: null, // clientId | 'FATURAMENTO' | 'CONFIG' | 'ORCAMENTOS'
   clientView: {}, // clientId -> {year, month}
   fatYear: REAL_YEAR,
@@ -851,7 +852,8 @@ let ui = {
   toast: null,
   valuesHidden: false, // privacy toggle — device-local preference, not synced
   conflito: null, // {quando} — aviso de que os dois aparelhos mudaram o mesmo item (ver juntarComNuvem)
-  pendingImport: null // {data, fileName} — set while confirming a restore, before it overwrites everything
+  pendingImport: null, // {data, fileName} — set while confirming a restore, before it overwrites everything
+  restaurando: false // true enquanto a copia de seguranca de antes de restaurar esta subindo
 };
 
 const PRIVACY_KEY = 'jnf-privacy-hidden';
@@ -921,11 +923,7 @@ const RITMO_ICONE_ANIM = `<svg viewBox="0 0 1024 1024" aria-hidden="true"><defs>
 const BETA = import.meta.env.MODE === 'beta';
 
 /* ---------------- rendering ---------------- */
-function esc(s){
-  return (s===undefined||s===null?'':String(s))
-    .replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;').replaceAll('"','&quot;');
-}
-
+// (esc — troca & < > " ' antes de pôr um texto na tela — mora no puro.js)
 
 /* ---------------- períodos de cobrança (fechamento por cliente) ----------------
    Cada aba de mês do cliente é o período de cobrança dele (a Wide "Setembro"
@@ -935,15 +933,6 @@ function esc(s){
      {data:'YYYY-MM-DD', notaId, valor}  -> período fechado
      {aberto:true, notaId}               -> reaberto (lembra a nota pra, ao
                                             fechar de novo, atualizar em vez de duplicar) */
-function shiftYm(ym, n){
-  const [y,m] = ym.split('-').map(Number);
-  const d = new Date(y, m-1+n, 1);
-  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`;
-}
-function ymDiff(a, b){
-  const [ya,ma] = a.split('-').map(Number), [yb,mb] = b.split('-').map(Number);
-  return (ya*12+ma) - (yb*12+mb);
-}
 function diasEntre(isoA, isoB){
   const [ya,ma,da] = isoA.split('-').map(Number), [yb,mb,db] = isoB.split('-').map(Number);
   return Math.round((new Date(yb,mb-1,db) - new Date(ya,ma-1,da)) / 86400000);
@@ -958,39 +947,17 @@ function periodoFechado(cid, ym){
 }
 // o período aberto do cliente: o mês seguinte ao último fechado; sem nenhum
 // fechamento ainda, o último mês (até o atual) que tem vídeo; senão o mês atual
-function periodoAberto(cid){
-  const atual = monthKey(REAL_YEAR, REAL_MONTH);
-  const f = (state.fechamentos && state.fechamentos[cid]) || {};
-  const fechados = Object.keys(f).filter(k=>periodoFechado(cid, k)).sort();
-  if(fechados.length) return shiftYm(fechados[fechados.length-1], 1);
-  const vids = state.videos[cid] || {};
-  const comVideo = Object.keys(vids).filter(k=>k<=atual && (vids[k]||[]).length).sort();
-  return comVideo.length ? comVideo[comVideo.length-1] : atual;
-}
+function periodoAberto(cid){ return P.periodoAberto(state, cid, monthKey(REAL_YEAR, REAL_MONTH)); }
 // quando o período costuma fechar (só pra estimativa): dia 0 = último dia do
 // próprio mês (Fábio); dia N = dia N do mês seguinte (Wide 4, WAD 8)
-function fechamentoPrevisto(cid, ym){
-  const c = clientById(cid);
-  const dia = c ? (Number(c.diaFechamento)||0) : 0;
-  const [y,m] = ym.split('-').map(Number);
-  if(!dia) return localISO(new Date(y, m, 0));
-  const lim = new Date(y, m+1, 0).getDate();
-  return localISO(new Date(y, m, Math.min(dia, lim)));
-}
+function fechamentoPrevisto(cid, ym){ return P.fechamentoPrevisto(state, cid, ym); }
 function inicioPeriodo(cid, ym){
   const ant = fechamentoDe(cid, shiftYm(ym,-1));
   if(ant && !ant.aberto && ant.data) return ant.data;
   const datas = ((state.videos[cid]||{})[ym]||[]).map(r=>r.data).filter(Boolean).sort();
   return datas[0] || null;
 }
-function acharNota(id){
-  if(!id) return null;
-  for(const y of Object.keys(state.notas||{})){
-    const idx = (state.notas[y]||[]).findIndex(n=>n.id===id);
-    if(idx>=0) return {year:y, idx, nota:state.notas[y][idx]};
-  }
-  return null;
-}
+function acharNota(id){ return P.acharNota(state.notas, id); }
 function nomeMesYm(ym, comAno){
   const [y,m] = ym.split('-');
   return MES_NOME[m].toLowerCase() + (comAno || y!==REAL_YEAR ? ` de ${y}` : '');
@@ -1061,7 +1028,7 @@ function painelCobrar(){
     const rodape = fechouHoje
       ? `<span>${MES_NOME[shiftYm(ym,-1).slice(5)]} fechado hoje · nota de <b class="sensitive">R$ ${fmtBRL(parseBRL(ant.valor))}</b></span>`
       : `<span>Fecha ${aprox ? 'por volta de' : 'dia'} <b>${ddmm(prevista)}</b></span><span>${quando}</span>`;
-    return `<button type="button" class="card cob" data-action="abrir-cliente" data-client="${id}">
+    return `<button type="button" class="card cob" data-action="abrir-cliente" data-client="${esc(id)}">
       <span class="top"><span class="chip ${chipClass(id)}">${esc(siglaDe(id))}</span><span class="nm">${esc(c.nome)}</span>${pill}</span>
       <span class="per">Período de ${nomeMesYm(ym)}</span><span class="big sensitive">R$ ${fmtBRL(total)}</span>
       <span class="sub">${plural(rows.length,'vídeo','vídeos')}${desde ? ` · desde ${ddmm(desde)}` : ''}</span>
@@ -1069,7 +1036,7 @@ function painelCobrar(){
     </button>`;
   }).join('');
   const emAberto = state.clientOrder.reduce((s,id)=> s + (clientById(id) ? monthTotal(id, periodoAberto(id)) : 0), 0);
-  return `<div class="sec-head"><h2>A cobrar${novoTag()}</h2><span class="sub">em aberto: <b class="sensitive">R$ ${fmtBRL(emAberto)}</b> · toque num cliente pra abrir</span></div>
+  return `<div class="sec-head"><h2>A cobrar</h2><span class="sub">em aberto: <b class="sensitive">R$ ${fmtBRL(emAberto)}</b> · toque num cliente pra abrir</span></div>
     <div class="cob-row${state.clientOrder.length>3?' rola':''}">${cards}</div>`;
 }
 
@@ -1084,7 +1051,7 @@ function periodoStatusHtml(cid, ym, total){
       : diverge ? ` <b class="warn-t">O total agora é <span class="sensitive">R$ ${fmtBRL(total)}</span> — reabra e feche de novo pra atualizar a nota.</b>` : '';
     return `<div class="periodo-banner">
       <span>✓ Período fechado em ${ddmm(f.data)} · nota de <b class="sensitive">R$ ${fmtBRL(parseBRL(f.valor))}</b>${notaSumiu ? '' : ' lançada em Notas emitidas'}.${aviso}</span>
-      <button type="button" data-action="reabrir-periodo" data-client="${cid}" data-ym="${ym}">Reabrir período</button>
+      <button type="button" data-action="reabrir-periodo" data-client="${esc(cid)}" data-ym="${esc(ym)}">Reabrir período</button>
     </div>`;
   }
   if(ym === periodoAberto(cid)){
@@ -1130,7 +1097,7 @@ function botaoData(iso, attrs){
 function calLinha(){
   const c = ui.cal;
   if(!c) return null;
-  if(c.tipo==='video') return getVideos(c.client, c.ym).find(r=>r.id===c.row) || null;
+  if(c.tipo==='video') return videosDe(c.client, c.ym).find(r=>r.id===c.row) || null;
   return (state.notas[c.year]||[]).find(r=>r.id===c.row) || null;
 }
 const MES_LONGO = ['janeiro','fevereiro','março','abril','maio','junho','julho','agosto','setembro','outubro','novembro','dezembro'];
@@ -1183,7 +1150,7 @@ function posicionarCalendario(){
 
 function fecharPeriodoHtml(cid, ym, rows, total){
   if(periodoFechado(cid, ym)) return '';
-  return `<button class="btn gold" data-action="fechar-periodo" data-client="${cid}" data-ym="${ym}" ${rows.length===0?'disabled':''}>Fechar período</button>`;
+  return `<button class="btn gold" data-action="fechar-periodo" data-client="${esc(cid)}" data-ym="${esc(ym)}" ${rows.length===0?'disabled':''}>Fechar período</button>`;
 }
 
 // janela de fechar periodo: card de vidro no Mac, tela cheia no celular (CSS)
@@ -1219,7 +1186,7 @@ function janelaFecharHtml(){
     ${campo('Valor da nota', fmtBRL(total))}
     <a class="btn gold fj-receita" href="https://www.nfse.gov.br/EmissorNacional" target="_blank" rel="noopener noreferrer">2. Abrir o site da nota MEI</a>
     <span class="fj-rot">3. Depois de emitir, volte aqui</span>
-    <button type="button" class="btn primary" data-action="fechar-ja-emiti" data-client="${j.cid}" data-ym="${j.ym}">Já emiti a nota</button>
+    <button type="button" class="btn primary" data-action="fechar-ja-emiti" data-client="${esc(j.cid)}" data-ym="${esc(j.ym)}">Já emiti a nota</button>
     <span class="fj-dica">Sua senha nunca passa pelo Ritmo: o login é direto no site do governo.</span>
   </div></div>`;
 }
@@ -1227,17 +1194,10 @@ function janelaFecharHtml(){
 /* ---------------- Painel (tela de acompanhamento, so leitura) ---------------- */
 const DIA_SEMANA = ['dom','seg','ter','qua','qui','sex','sáb'];
 const DIA_SEMANA_LONGO = ['segunda','terça','quarta','quinta','sexta','sábado','domingo'];
-// a etiqueta "NOVO" nos blocos novos some sozinha depois desta data
-const NOVO_ATE = '2026-10-31';
 
-function addDays(iso, n){
-  const [y,m,d] = iso.split('-').map(Number);
-  return localISO(new Date(y, m-1, d+n));
-}
 function ddmm(iso){ const [,m,d] = iso.split('-'); return `${d}/${m}`; }
 function plural(n, um, varios){ return `${n} ${n===1?um:varios}`; }
 function fmtCurto(v){ return v%1===0 ? v.toLocaleString('pt-BR') : fmtBRL(v); }
-function novoTag(){ return TODAY_ISO <= NOVO_ATE ? ' <span class="new">NOVO</span>' : ''; }
 
 // soma dos vídeos por data (todas as abas de cliente, todos os meses).
 // Um vídeo conta no dia da data escrita nele.
@@ -1260,12 +1220,7 @@ function videosPorData(){
 
 // meta do mes: a do proprio mes, ou (se ainda nao definida) a do ultimo mes
 // anterior que tenha meta — o mes novo ja comeca com a meta do anterior.
-function metaDoMes(ym){
-  const metas = state.metas || {};
-  if(Object.prototype.hasOwnProperty.call(metas, ym)) return parseBRL(metas[ym]) || 0;
-  const anteriores = Object.keys(metas).filter(k=>k<ym).sort();
-  return anteriores.length ? (parseBRL(metas[anteriores[anteriores.length-1]]) || 0) : 0;
-}
+function metaDoMes(ym){ return P.metaDoMes(state.metas, ym); }
 
 function diasNoMes(year, month){ return new Date(Number(year), Number(month), 0).getDate(); }
 
@@ -1309,7 +1264,7 @@ function painelMeta(ym){
   const podeVoltar = ym > semanasPrimeiroYm({});
   const seta = (dir, ok, rotulo, path)=>`<button type="button" data-action="meta-mes" data-dir="${dir}" aria-label="${rotulo}"${ok?'':' disabled'}><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="${path}"/></svg></button>`;
   const nav = `<div class="msw" role="group" aria-label="Trocar mês da meta">${seta(-1, podeVoltar, 'Mês anterior', 'm15 18-6-6 6-6')}<span>${mesNome} ${ano}</span>${seta(1, !ehAtual, 'Próximo mês', 'm9 18 6-6-6-6')}</div>`;
-  const head = r => `<div class="head head-meta"><span class="label">Meta de ${mesTxt}${novoTag()}</span>${nav}</div>${r ? `<div class="meta-acts">${r}</div>` : ''}`;
+  const head = r => `<div class="head head-meta"><span class="label">Meta de ${mesTxt}</span>${nav}</div>${r ? `<div class="meta-acts">${r}</div>` : ''}`;
   // mês anterior ainda com cliente sem fechar: aviso com atalho pra ele
   let lembrete = '';
   if(ehAtual){
@@ -1408,7 +1363,7 @@ function painelHoje(porData){
   const hoje = porData[TODAY_ISO] || {v:0, n:0};
   const ontem = porData[addDays(TODAY_ISO,-1)] || {v:0, n:0};
   return `<div class="card s4">
-    <span class="label">Hoje${novoTag()}</span><span class="big sensitive">R$ ${fmtBRL(hoje.v)}</span>
+    <span class="label">Hoje</span><span class="big sensitive">R$ ${fmtBRL(hoje.v)}</span>
     <p class="sub">${DIA_SEMANA[now.getDay()]}, ${ddmm(TODAY_ISO)} · ${plural(hoje.n,'vídeo','vídeos')}</p>
     <p class="sub">Ontem: <b class="sensitive">R$ ${fmtBRL(ontem.v)}</b></p>
     <button class="quick" type="button" data-action="go-lancar">+ Lançar vídeo</button>
@@ -1417,9 +1372,7 @@ function painelHoje(porData){
 
 function painelSemana(porData){
   // semana de segunda a domingo
-  const idxHoje = (now.getDay()+6)%7;
-  const seg = addDays(TODAY_ISO, -idxHoje);
-  const dom = addDays(seg, 6);
+  const {idx: idxHoje, seg, dom} = P.semanaDe(TODAY_ISO);
   const dias = [0,1,2,3,4,5,6].map(i=>{
     const e = porData[addDays(seg,i)] || {v:0, n:0};
     return {i, v:e.v, n:e.n};
@@ -1461,7 +1414,7 @@ function painelSemana(porData){
     divisao = `<div class="wk-split" aria-hidden="true">${faixa}</div><p class="wk-split-t">${txt}</p>`;
   }
   return `<div class="card card-week s8">
-    <div class="left"><span class="label">Esta semana${novoTag()}</span><span class="big sensitive">R$ ${fmtBRL(total)}</span>
+    <div class="left"><span class="label">Esta semana</span><span class="big sensitive">R$ ${fmtBRL(total)}</span>
     <p class="sub">${intervalo} · ${plural(n,'vídeo','vídeos')}</p><p class="sub">${passadaLabel}: <b class="sensitive">R$ ${fmtBRL(passada)}</b></p>${divisao}</div>
     <div class="wbars" role="img" aria-label="Faturamento por dia desta semana">${bars}</div>
   </div>`;
@@ -1521,7 +1474,7 @@ function painelDiaADia(porData, ym){
   });
   const avgLine = avg>0 ? `<div class="avg" style="bottom:${(avg/MAX*100).toFixed(1)}%"><span class="sensitive">média R$ ${fmtBRL(avg)}</span></div>` : '';
   return `<div class="card s8">
-    <div class="head"><span class="label">${MES_NOME[REAL_MONTH]} dia a dia${novoTag()}</span><span class="sub">fins de semana em cinza</span></div>
+    <div class="head"><span class="label">${MES_NOME[REAL_MONTH]} dia a dia</span><span class="sub">fins de semana em cinza</span></div>
     <div class="chart" style="--dias:${dim}">
       <div class="yaxis sensitive"><span>${fmtCurto(MAX)}</span><span>${fmtCurto(step)}</span><span>0</span></div>
       <div class="plot">
@@ -1569,17 +1522,7 @@ function painelSemanas(porData){
   const mesNome = MES_NOME[mes];
   const atual = monthKey(REAL_YEAR, REAL_MONTH);
   const ehAtual = ym===atual;
-  const dim = diasNoMes(ano, mes);
-  const semanas = [];
-  let cur = null;
-  for(let d=1; d<=dim; d++){
-    const iso = `${ym}-${String(d).padStart(2,'0')}`;
-    const dow = new Date(Number(ano), Number(mes)-1, d).getDay();
-    if(!cur || dow===1){ cur = {ini:d, fim:d, v:0, n:0}; semanas.push(cur); }
-    cur.fim = d;
-    const e = porData[iso];
-    if(e){ cur.v += e.v; cur.n += e.n; }
-  }
+  const semanas = P.semanasDoMes(ym, porData);
   const dia = now.getDate();
   semanas.forEach(s=>{
     s.agora = ehAtual && dia>=s.ini && dia<=s.fim;
@@ -1611,7 +1554,7 @@ function painelSemanas(porData){
   const podeVoltar = ym > semanasPrimeiroYm(porData);
   const seta = (dir, ok, rotulo, path)=>`<button type="button" data-action="semanas-mes" data-dir="${dir}" aria-label="${rotulo}"${ok?'':' disabled'}><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="${path}"/></svg></button>`;
   return `<div class="card card-semanas s12">
-    <div class="head"><span class="label">Semana a semana${novoTag()}</span>
+    <div class="head"><span class="label">Semana a semana</span>
       <div class="msw" role="group" aria-label="Trocar mês">${seta(-1, podeVoltar, 'Mês anterior', 'm15 18-6-6 6-6')}<span>${mesNome} ${ano}</span>${seta(1, !ehAtual, 'Próximo mês', 'm9 18 6-6-6-6')}</div>
     </div>
     <div class="chart">
@@ -1640,7 +1583,7 @@ function painelClientes(ym){
     const e = prod[id] || {v:0, n:0};
     return {id, nome:c.nome, v:e.v, n:e.n};
   }).filter(c=>c && c.v>0).sort((a,b)=>b.v-a.v);
-  const head = `<div class="head"><span class="label">Por cliente em ${mesNome}${novoTag()}</span></div>`;
+  const head = `<div class="head"><span class="label">Por cliente em ${mesNome}</span></div>`;
   if(!lista.length){
     return `<div class="card s4">${head}<p class="msg">Nenhum vídeo em ${mesNome} ainda.</p></div>`;
   }
@@ -1718,7 +1661,7 @@ function painelRecentes(){
     </div>`;
   }).join('');
   return `<div class="card s5">
-    <div class="head"><span class="label">Últimos vídeos${novoTag()}</span><button class="quick" type="button" data-action="go-lancar">Ver todos</button></div>
+    <div class="head"><span class="label">Últimos vídeos</span><button class="quick" type="button" data-action="go-lancar">Ver todos</button></div>
     ${rows ? `<div class="recent">${rows}</div>` : '<p class="msg">Nenhum vídeo lançado ainda.</p>'}
   </div>`;
 }
@@ -1769,9 +1712,8 @@ function topoMarcaHtml(){
 }
 
 function saveStateHtml(){
-  const cls = saveMode==='saving' ? ' saving' : saveMode==='error' ? ' error' : '';
-  const txt = saveMode==='saving' ? 'salvando…' : saveMode==='error' ? 'erro ao salvar — verifique a conexão' : 'salvo';
-  return `<div id="savestate" class="savestate${cls}">${txt}</div>`;
+  const cls = indicadorEmAlerta() ? ' error' : saveMode==='saving' ? ' saving' : '';
+  return `<div id="savestate" class="savestate${cls}">${textoDoIndicador()}</div>`;
 }
 
 function render(){
@@ -1829,7 +1771,7 @@ function renderRail(){
     const c = clientById(id);
     if(!c) return;
     const active = ui.tab===id;
-    html += `<button class="tab-btn ${active?'active':''}" data-action="switch-tab" data-tab="${id}">
+    html += `<button class="tab-btn ${active?'active':''}" data-action="switch-tab" data-tab="${esc(id)}">
       <span class="tab-chip ${chipClass(id)}">${esc(siglaDe(id))}</span>
       <span class="tab-label">${esc(c.nome)}</span>
     </button>`;
@@ -1986,7 +1928,7 @@ function renderClientPanel(clientId){
     const alt = v>0 && maiorMes>0 ? Math.max(8, Math.round(v/maiorMes*100)) : 0;
     const dica = `${m.nome}: R$ ${fmtBRL(v)}${has?` · ${state.videos[clientId][k].length} lançamentos`:''}${fechado?' · período fechado':aberto?' · período aberto':''}`;
     monthsHtml += `<button class="month-pill ${active?'active':''} ${has?'has-data':''} ${fechado?'closed':''} ${aberto?'open-p':''}"
-      data-action="switch-month" data-client="${clientId}" data-month="${m.k}" title="${dica}" aria-label="${dica}">
+      data-action="switch-month" data-client="${esc(clientId)}" data-month="${m.k}" title="${dica}" aria-label="${dica}">
       <span class="lc-col"><span class="lc-bar" style="height:${alt}%"></span></span><span class="lc-m">${m.nome.slice(0,3)}</span>
     </button>`;
   });
@@ -2001,13 +1943,13 @@ function renderClientPanel(clientId){
   } else if(isEsp){
     rowsHtml = `<div class="esp-cards">`;
     ordenar(rows).forEach(([r])=>{
-      rowsHtml += `<div class="esp-card ${animateRows?'row-enter':''}" data-row="${r.id}">
+      rowsHtml += `<div class="esp-card ${animateRows?'row-enter':''}" data-row="${esc(r.id)}">
         <textarea class="esp-textarea" rows="2" placeholder="Escreva aqui: cliente, o que foi feito, quantos vídeos etc."
-          data-role="video-field" data-client="${clientId}" data-ym="${ym}" data-row="${r.id}" data-field="headline">${esc(r.headline)}</textarea>
+          data-role="video-field" data-client="${esc(clientId)}" data-ym="${esc(ym)}" data-row="${esc(r.id)}" data-field="headline">${esc(r.headline)}</textarea>
         <div class="esp-card-foot">
           <div class="valor-wrap"><span class="valor-prefix">R$</span><input class="cell-input valor sensitive" type="text" inputmode="decimal" value="${esc(valorDisplay(r.valor))}"
-            data-role="video-field" data-client="${clientId}" data-ym="${ym}" data-row="${r.id}" data-field="valor" placeholder="0,00"></div>
-          <button class="icon-btn" title="Excluir lançamento" data-action="delete-video" data-client="${clientId}" data-ym="${ym}" data-row="${r.id}">✕</button>
+            data-role="video-field" data-client="${esc(clientId)}" data-ym="${esc(ym)}" data-row="${esc(r.id)}" data-field="valor" placeholder="0,00"></div>
+          <button class="icon-btn" title="Excluir lançamento" data-action="delete-video" data-client="${esc(clientId)}" data-ym="${esc(ym)}" data-row="${esc(r.id)}">✕</button>
         </div>
       </div>`;
     });
@@ -2019,22 +1961,22 @@ function renderClientPanel(clientId){
         <th class="data">Data</th><th class="valor">Valor</th><th class="acao"></th>
       </tr></thead><tbody>`;
     ordenar(rows).forEach(([r,i])=>{
-      rowsHtml += `<tr data-row="${r.id}" class="${animateRows?'row-enter':''}">
+      rowsHtml += `<tr data-row="${esc(r.id)}" class="${animateRows?'row-enter':''}">
         <td class="num">${i+1}</td>
         <td class="video"><input class="cell-input" type="text" value="${esc(r.headline)}"
-          data-role="video-field" data-client="${clientId}" data-ym="${ym}" data-row="${r.id}" data-field="headline" placeholder="Nome do vídeo"></td>
+          data-role="video-field" data-client="${esc(clientId)}" data-ym="${esc(ym)}" data-row="${esc(r.id)}" data-field="headline" placeholder="Nome do vídeo"></td>
         <td class="cliente"><input class="cell-input" type="text" value="${esc(r.subcliente)}"
-          data-role="video-field" data-client="${clientId}" data-ym="${ym}" data-row="${r.id}" data-field="subcliente" placeholder="Cliente final"></td>
-        <td class="data">${botaoData(r.data, `data-tipo="video" data-client="${clientId}" data-ym="${ym}" data-row="${r.id}"`)}</td>
+          data-role="video-field" data-client="${esc(clientId)}" data-ym="${esc(ym)}" data-row="${esc(r.id)}" data-field="subcliente" placeholder="Cliente final"></td>
+        <td class="data">${botaoData(r.data, `data-tipo="video" data-client="${esc(clientId)}" data-ym="${esc(ym)}" data-row="${esc(r.id)}"`)}</td>
         <td class="valor"><div class="valor-wrap"><span class="valor-prefix">R$</span><input class="cell-input valor sensitive" type="text" inputmode="decimal" value="${esc(valorDisplay(r.valor))}"
-          data-role="video-field" data-client="${clientId}" data-ym="${ym}" data-row="${r.id}" data-field="valor"></div></td>
-        <td class="acao"><button class="icon-btn" title="Excluir vídeo" data-action="delete-video" data-client="${clientId}" data-ym="${ym}" data-row="${r.id}">✕</button></td>
+          data-role="video-field" data-client="${esc(clientId)}" data-ym="${esc(ym)}" data-row="${esc(r.id)}" data-field="valor"></div></td>
+        <td class="acao"><button class="icon-btn" title="Excluir vídeo" data-action="delete-video" data-client="${esc(clientId)}" data-ym="${esc(ym)}" data-row="${esc(r.id)}">✕</button></td>
       </tr>`;
     });
     rowsHtml += `</tbody></table></div>`;
   }
 
-  const addBtn = `<button class="add-row-btn${ui.ordemDesc?' add-topo':''}" data-action="add-video" data-client="${clientId}" data-ym="${ym}">+ ${isEsp?'adicionar lançamento':'adicionar vídeo'}</button>`;
+  const addBtn = `<button class="add-row-btn${ui.ordemDesc?' add-topo':''}" data-action="add-video" data-client="${esc(clientId)}" data-ym="${esc(ym)}">+ ${isEsp?'adicionar lançamento':'adicionar vídeo'}</button>`;
   const desdeP = inicioPeriodo(clientId, ym);
   const mesNome = MES_NOME[view.month];
   return `
@@ -2043,9 +1985,9 @@ function renderClientPanel(clientId){
         <span class="lc-chip ${chipClass(clientId)}">${esc(siglaDe(clientId))}</span>
         <div class="lc-nome"><div class="panel-title">${esc(c.nome)}${isEsp?' <span class="tipo-badge">esporádico</span>':''}</div></div>
         <div class="year-switch lc-ano">
-          <button data-action="year-step" data-client="${clientId}" data-dir="-1" aria-label="Ano anterior">‹</button>
+          <button data-action="year-step" data-client="${esc(clientId)}" data-dir="-1" aria-label="Ano anterior">‹</button>
           <span>${view.year}</span>
-          <button data-action="year-step" data-client="${clientId}" data-dir="1" aria-label="Próximo ano">›</button>
+          <button data-action="year-step" data-client="${esc(clientId)}" data-dir="1" aria-label="Próximo ano">›</button>
         </div>
       </div>
       ${periodoStatusHtml(clientId, ym, total)}
@@ -2062,7 +2004,7 @@ function renderClientPanel(clientId){
     <div class="lc-card lc-lista">
       <div class="lc-mh"><small>${isEsp?'Lançamentos':'Vídeos'} de ${mesNome.toLowerCase()}</small><span>total <b class="sensitive">R$ ${fmtBRL(total)}</b></span></div>
       <div class="action-bar action-top">
-        <button class="btn primary" data-action="gerar-pdf" data-client="${clientId}" data-ym="${ym}" ${rows.length===0?'disabled':''}>Gerar relatório PDF</button>
+        <button class="btn primary" data-action="gerar-pdf" data-client="${esc(clientId)}" data-ym="${esc(ym)}" ${rows.length===0?'disabled':''}>Gerar relatório PDF</button>
         ${fecharPeriodoHtml(clientId, ym, rows, total)}
         ${rows.length>1 ? `<button type="button" class="ordem-btn${ui.ordemDesc?' desc':''}" data-action="virar-lista" aria-pressed="${ui.ordemDesc}"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 5v14M6 13l6 6 6-6"/></svg>${ui.ordemDesc?'Mais recentes primeiro':'Mais antigos primeiro'}</button>` : ''}
       </div>
@@ -2101,11 +2043,11 @@ function renderFaturamento(){
     rows.forEach(r=>{
       rowsHtml += `<tr class="${animateRows?'row-enter':''}">
         <td><input class="cell-input" type="text" list="empresa-list" value="${esc(r.empresa)}"
-          data-role="nota-field" data-year="${year}" data-row="${r.id}" data-field="empresa"></td>
-        <td>${botaoData(r.data, `data-tipo="nota" data-year="${year}" data-row="${r.id}"`)}</td>
+          data-role="nota-field" data-year="${esc(year)}" data-row="${esc(r.id)}" data-field="empresa"></td>
+        <td>${botaoData(r.data, `data-tipo="nota" data-year="${esc(year)}" data-row="${esc(r.id)}"`)}</td>
         <td><div class="valor-wrap"><span class="valor-prefix">R$</span><input class="cell-input valor sensitive" type="text" inputmode="decimal" value="${esc(valorDisplay(r.valor))}"
-          data-role="nota-field" data-year="${year}" data-row="${r.id}" data-field="valor"></div></td>
-        <td class="acao"><button class="icon-btn" title="Excluir nota" data-action="delete-nota" data-year="${year}" data-row="${r.id}">✕</button></td>
+          data-role="nota-field" data-year="${esc(year)}" data-row="${esc(r.id)}" data-field="valor"></div></td>
+        <td class="acao"><button class="icon-btn" title="Excluir nota" data-action="delete-nota" data-year="${esc(year)}" data-row="${esc(r.id)}">✕</button></td>
       </tr>`;
     });
     rowsHtml += `</tbody></table></div>
@@ -2136,7 +2078,7 @@ function renderFaturamento(){
 
     ${rowsHtml}
     <div class="table-foot">
-      <button class="add-row-btn" data-action="add-nota" data-year="${year}">+ adicionar nota</button>
+      <button class="add-row-btn" data-action="add-nota" data-year="${esc(year)}">+ adicionar nota</button>
       <div class="month-total">Total ${year}: <b class="sensitive">R$ ${fmtBRL(total)}</b></div>
     </div>
   `;
@@ -2153,11 +2095,11 @@ function renderConfig(){
     const isEsp = c.tipo==='esporadico';
     clientsHtml += `<div class="client-mgmt-row">
       <div class="client-avatar ${chipClass(id)}">${esc(siglaDe(id))}</div>
-      <input type="text" value="${esc(c.nome)}" data-role="client-field" data-client="${id}" data-field="nome">
+      <input type="text" value="${esc(c.nome)}" data-role="client-field" data-client="${esc(id)}" data-field="nome">
       ${isEsp
         ? `<span class="tipo-badge" title="Cliente esporádico, sem valor padrão a cada lançamento">esporádico</span>`
-        : `<input class="sensitive" type="text" inputmode="decimal" value="${esc(valorDisplay(c.valorPadrao))}" title="Valor padrão por vídeo" data-role="client-field" data-client="${id}" data-field="valorPadrao">`}
-      <button class="btn small danger-step ${armed?'confirming':''}" data-action="delete-client" data-client="${id}">
+        : `<input class="sensitive" type="text" inputmode="decimal" value="${esc(valorDisplay(c.valorPadrao))}" title="Valor padrão por vídeo" data-role="client-field" data-client="${esc(id)}" data-field="valorPadrao">`}
+      <button class="btn small danger-step ${armed?'confirming':''}" data-action="delete-client" data-client="${esc(id)}">
         ${armed?'Confirmar exclusão':'Excluir aba'}
       </button>
     </div>`;
@@ -2206,7 +2148,7 @@ function renderConfig(){
       return `<div class="client-mgmt-row fecha-row">
         <div class="client-avatar ${chipClass(id)}">${esc(siglaDe(id))}</div>
         <span class="fecha-nome">${esc(c.nome)}</span>
-        <select data-role="client-fecha" data-client="${id}" aria-label="Quando ${esc(c.nome)} costuma fechar">${opts}</select>
+        <select data-role="client-fecha" data-client="${esc(id)}" aria-label="Quando ${esc(c.nome)} costuma fechar">${opts}</select>
       </div>`;
     }).join('')}</div>
 
@@ -2231,7 +2173,7 @@ function renderConfig(){
       return `<div class="client-mgmt-row fecha-row">
         <div class="client-avatar ${chipClass(id)}">${esc(siglaDe(id))}</div>
         <span class="fecha-nome">${esc(c.nome)}</span>
-        <input class="sensitive cnpj-in" type="text" inputmode="numeric" autocomplete="off" placeholder="00.000.000/0001-00" value="${esc(c.cnpj||'')}" data-role="client-cnpj" data-client="${id}" aria-label="CNPJ de ${esc(c.nome)}">
+        <input class="sensitive cnpj-in" type="text" inputmode="numeric" autocomplete="off" placeholder="00.000.000/0001-00" value="${esc(c.cnpj||'')}" data-role="client-cnpj" data-client="${esc(id)}" aria-label="CNPJ de ${esc(c.nome)}">
       </div>`;
     }).join('')}</div>
 
@@ -2260,7 +2202,7 @@ function renderConfig(){
         <p style="color:var(--danger);font-weight:600;margin:12px 0 8px;">
           Substituir TODOS os dados atuais pelo arquivo "${esc(ui.pendingImport.fileName)}"? Logo depois dá pra desfazer por 10 segundos.
         </p>
-        <button class="btn danger-step confirming" data-action="confirm-import">Sim, substituir tudo</button>
+        <button class="btn danger-step confirming" data-action="confirm-import" ${ui.restaurando?'disabled':''}>${ui.restaurando ? 'Guardando uma cópia antes…' : 'Sim, substituir tudo'}</button>
         <button class="btn" data-action="cancel-import">Cancelar</button>
       </div>
     ` : ''}
@@ -2347,19 +2289,11 @@ function onAppInputInner(e){
   } else if(role==='business-field'){
     state.business[t.dataset.field] = t.value;
     persist();
-    // topbar shows nomeFantasia/cnpj live — patch just those two text nodes
-    // directly instead of a full render, so the field being typed in is
-    // never touched.
+    // a saudacao do topo mostra o apelido/nome ao vivo — troca so esse texto
+    // em vez de redesenhar a tela, pra nao mexer no campo sendo digitado
     if(t.dataset.field==='apelido' || t.dataset.field==='nomeFantasia'){
       const em = document.querySelector('.topbar .tr-oi em');
       if(em) em.textContent = nomeSaudacao();
-    }
-    if(t.dataset.field==='nomeFantasia'){
-      const h1 = document.querySelector('.topbar .brand h1');
-      if(h1) h1.textContent = t.value || 'Minha empresa';
-    } else if(t.dataset.field==='cnpj'){
-      const sub = document.querySelector('.topbar .brand .sub');
-      if(sub) sub.textContent = `CNPJ ${t.value || '—'}`;
     }
   } else if(role==='client-field'){
     const c = clientById(t.dataset.client);
@@ -2479,7 +2413,6 @@ function onAppClickInner(e){
       else tab = clienteValido(ui.tab) ? ui.tab : (clienteValido(ui.ultimoCliente) ? ui.ultimoCliente : (state.clientOrder.find(clienteValido) || 'FATURAMENTO'));
       if(ui.screen==='lanc' && ui.tab===tab) return;
       ui.screen = 'lanc';
-      ui.confirmClose = null;
       ui.tab = tab;
       if(clienteValido(tab)) ensureClientView(tab);
     }
@@ -2525,14 +2458,12 @@ function onAppClickInner(e){
     render();
   }
   else if(action==='switch-tab'){
-    ui.confirmClose = null;
     ui.tab = btn.dataset.tab;
     ui.ultimoCliente = ui.tab;
     if(ui.tab!=='FATURAMENTO' && ui.tab!=='CONFIG' && ui.tab!=='ORCAMENTOS') ensureClientView(ui.tab);
     render();
   }
   else if(action==='switch-month'){
-    ui.confirmClose = null;
     ensureClientView(btn.dataset.client).month = btn.dataset.month;
     render();
   }
@@ -2637,7 +2568,7 @@ function onAppClickInner(e){
     });
   }
   else if(action==='gerar-pdf'){
-    generatePDF(btn.dataset.client, btn.dataset.ym);
+    generatePDF(btn.dataset.client, btn.dataset.ym).catch(avisarErroDeAcao);
   }
   else if(action==='fechar-periodo'){
     if(periodoFechado(btn.dataset.client, btn.dataset.ym)) return;
@@ -2673,11 +2604,29 @@ function onAppClickInner(e){
   }
   else if(action==='cal-dia' || action==='cal-limpar'){
     const linha = calLinha();
+    const ehNota = !!ui.cal && ui.cal.tipo==='nota';
+    let mov = null, dataAntes;
     if(linha){
+      dataAntes = linha.data;
       linha.data = action==='cal-limpar' ? null : btn.dataset.dia;
+      // nota cuja data passou pra outro ano: vai pra gaveta desse ano (a mesma
+      // nota, mesmo id) — e o limite do MEI soma a gaveta do ano
+      if(ehNota) mov = P.ajustarGavetaDaNota(state, linha.id, dataAntes);
       persist();
     }
     ui.cal = null;
+    if(mov){
+      const id = linha.id;
+      showToast(`A data dessa nota é de ${mov.para}: ela passou para as notas de ${mov.para} e conta no limite de ${mov.para}.`, ()=>{
+        const n = acharNota(id);
+        if(!n) return;
+        if(dataAntes===undefined) delete n.nota.data; else n.nota.data = dataAntes;
+        P.devolverNotaPraGaveta(state, id, mov);
+        persist();
+        render();
+      });
+      return;
+    }
     render();
   }
   else if(action==='fechar-janela'){
@@ -2698,7 +2647,7 @@ function onAppClickInner(e){
     const j = ui.fecharJanela;
     ui.fecharJanela = null;
     render();
-    if(j) generatePDF(j.cid, j.ym);
+    if(j) generatePDF(j.cid, j.ym).catch(avisarErroDeAcao);
   }
   else if(action==='fechar-ja-emiti'){
     refreshToday();
@@ -2706,7 +2655,8 @@ function onAppClickInner(e){
     const c = clientById(client);
     if(!c || periodoFechado(client, ym)){ ui.fecharJanela = null; render(); return; }
     ui.fecharJanela = {cid: client, ym, etapa: 'feito'};
-    const total = monthTotal(client, ym);
+    // duas casas certinhas: a soma de valores quebrados pode sair 150.00000001
+    const total = centavos(monthTotal(client, ym));
     if(!state.fechamentos[client]) state.fechamentos[client] = {};
     const antes = state.fechamentos[client][ym]; // undefined, ou {aberto:true, notaId} se foi reaberto
     const antiga = antes && antes.aberto ? acharNota(antes.notaId) : null;
@@ -2717,7 +2667,15 @@ function onAppClickInner(e){
       antiga.nota.valor = total;
       antiga.nota.data = TODAY_ISO;
       notaId = antiga.nota.id;
-      desfazerNota = ()=>{ const n = acharNota(notaId); if(n){ n.nota.valor = valor; n.nota.data = data; } };
+      // fechou de novo em outro ano (ex.: reabriu depois da virada): a mesma nota
+      // passa pra gaveta do ano de hoje, que e o que conta pro limite do MEI
+      const mov = P.ajustarGavetaDaNota(state, notaId, data);
+      desfazerNota = ()=>{
+        const n = acharNota(notaId);
+        if(!n) return;
+        n.nota.valor = valor; n.nota.data = data;
+        P.devolverNotaPraGaveta(state, notaId, mov); // volta pra gaveta de onde saiu
+      };
     } else {
       // a nota entra no ano em que foi emitida (hoje), que e o que conta pro limite do MEI
       const year = TODAY_ISO.slice(0,4);
@@ -2860,20 +2818,10 @@ function onAppClickInner(e){
     document.getElementById('import-file').click();
   }
   else if(action==='confirm-import'){
-    if(!ui.pendingImport) return;
-    const antes = state;
-    state = ui.pendingImport.data;
-    migrateState();
-    ui.pendingImport = null;
-    persist();
-    render();
-    showToast('Backup restaurado.', ()=>{
-      state = antes;
-      persist();
-      render();
-    });
+    restaurarBackup();
   }
   else if(action==='cancel-import'){
+    if(ui.restaurando) return; // a copia de seguranca ja esta subindo
     ui.pendingImport = null;
     render();
   }
@@ -2907,6 +2855,43 @@ function onAppSubmit(e){
   }
 }
 
+// Troca TODOS os dados pelos do arquivo (ja conferido e completado em
+// onImportFile). Antes de trocar, guarda uma copia dos dados de agora na nuvem
+// (linha `-conflito-…`, motivo "antes-restaurar"): se a copia nao subir, NADA
+// muda. Depois de trocar, o Desfazer de 10 s continua valendo.
+async function restaurarBackup(){
+  const p = ui.pendingImport;
+  if(!p || ui.restaurando) return;
+  ui.restaurando = true;
+  render();
+  try{
+    // se algo mudar enquanto a copia sobe (o outro aparelho, uma edicao),
+    // guarda de novo: a copia tem que ser do que vai ser substituido
+    for(let volta=0; volta<2; volta++){
+      const agora = JSON.stringify(state);
+      await guardarCopia(agora, 'antes-restaurar');
+      if(JSON.stringify(state) === agora) break;
+    }
+  }catch(err){
+    console.error('Restaurar backup: falha ao guardar a cópia de segurança', err);
+    ui.restaurando = false;
+    showToast('Não consegui guardar uma cópia de segurança dos dados atuais (sem internet?). Nada foi mudado — tente restaurar de novo.');
+    return;
+  }
+  ui.restaurando = false;
+  if(ui.pendingImport !== p){ render(); return; }
+  const antes = state;
+  state = p.data;
+  ui.pendingImport = null;
+  persist();
+  render();
+  showToast('Backup restaurado.', ()=>{
+    state = antes;
+    persist();
+    render();
+  });
+}
+
 function onImportFile(e){
   const file = e.target.files[0];
   if(!file) return;
@@ -2914,13 +2899,18 @@ function onImportFile(e){
   reader.onload = () => {
     try{
       const parsed = JSON.parse(reader.result);
-      if(!parsed.clients || !parsed.business){ throw new Error('formato inválido'); }
+      // a mesma conferencia do carregamento: tem que ter cara de dados do Ritmo
+      if(!pareceEstado(parsed)){ throw new Error('formato inválido'); }
+      // completa os campos novos NO ARQUIVO LIDO (ainda fora do app): se o
+      // arquivo estiver torto e isso falhar, o estado atual nem foi tocado
+      migrateState(parsed);
       // não aplica na hora — pede confirmação, já que isso substitui TODOS os
       // dados atuais (notas, vídeos, clientes) sem volta.
       ui.pendingImport = {data: parsed, fileName: file.name};
       render();
     }catch(err){
-      showToast('Não consegui ler esse arquivo. Confira se é um backup válido (.json).');
+      console.error('Restaurar backup: arquivo recusado', err);
+      showToast('Não consegui usar esse arquivo: ele não parece um backup do Ritmo (.json). Nada foi mudado.');
     }
   };
   reader.readAsText(file);
@@ -3060,12 +3050,12 @@ function renderOrcamentos(){
   const o = orcAtual();
   return o ? orcEditorHtml(o) : orcListaHtml();
 }
-function orcStatusChip(s){ return `<span class="oc-st oc-st-${s}">${ORC_STATUS[s]||s}</span>`; }
+function orcStatusChip(s){ return `<span class="oc-st oc-st-${esc(s)}">${esc(ORC_STATUS[s]||s)}</span>`; }
 function orcListaHtml(){
   const lista = state.orcamentos.slice().sort((a,b)=> (b.data||'').localeCompare(a.data||'') || String(b.numero).localeCompare(String(a.numero)));
   const linhas = lista.map(o=>{
     const t = orcTotais(o);
-    return `<button type="button" class="oc-linha" data-action="orc-abrir" data-id="${o.id}">
+    return `<button type="button" class="oc-linha" data-action="orc-abrir" data-id="${esc(o.id)}">
       <span class="oc-l-txt"><b>${esc(o.cliente||'Sem nome')}</b><small>${esc(o.projeto||'—')} · ${esc(o.numero)} · ${ddmm(o.data)}</small></span>
       <span class="oc-l-v sensitive">R$ ${fmtBRL(t.total)}</span>${orcStatusChip(o.status)}
     </button>`;
@@ -3098,11 +3088,11 @@ function orcEditorHtml(o){
     .map(cl=>`<span>${esc(cl.nome.split(' ')[0].charAt(0)+cl.nome.split(' ')[0].slice(1).toLowerCase())} R$ ${fmtCurto(parseBRL(cl.valorPadrao))}</span>`).join('');
   const inp = (f, val, extra='') => `<input type="text" data-role="orc" data-field="${f}" value="${esc(val??'')}" ${extra}>`;
   const itens = (o.itens||[]).map(it=>`<div class="oc-item">
-      <div class="oc-i-d"><label>Descrição</label><input type="text" data-role="orc-item" data-row="${it.id}" data-field="descricao" value="${esc(it.descricao||'')}"></div>
-      <div class="oc-i-q"><label>Qtd</label><input type="text" inputmode="numeric" data-role="orc-item" data-row="${it.id}" data-field="qtd" value="${esc(it.qtd??'')}"></div>
-      <div class="oc-i-v"><label>Valor un.</label><input class="sensitive" type="text" inputmode="decimal" data-role="orc-item" data-row="${it.id}" data-field="valor" value="${esc(it.valor??'')}" placeholder="0,00"></div>
-      <button type="button" class="oc-x" data-action="orc-item-del" data-row="${it.id}" aria-label="Tirar item">✕</button>
-      <div class="oc-i-sub sensitive" data-sub="${it.id}">R$ ${fmtBRL((parseInt(it.qtd,10)||0)*parseBRL(it.valor))}</div>
+      <div class="oc-i-d"><label>Descrição</label><input type="text" data-role="orc-item" data-row="${esc(it.id)}" data-field="descricao" value="${esc(it.descricao||'')}"></div>
+      <div class="oc-i-q"><label>Qtd</label><input type="text" inputmode="numeric" data-role="orc-item" data-row="${esc(it.id)}" data-field="qtd" value="${esc(it.qtd??'')}"></div>
+      <div class="oc-i-v"><label>Valor un.</label><input class="sensitive" type="text" inputmode="decimal" data-role="orc-item" data-row="${esc(it.id)}" data-field="valor" value="${esc(it.valor??'')}" placeholder="0,00"></div>
+      <button type="button" class="oc-x" data-action="orc-item-del" data-row="${esc(it.id)}" aria-label="Tirar item">✕</button>
+      <div class="oc-i-sub sensitive" data-sub="${esc(it.id)}">R$ ${fmtBRL((parseInt(it.qtd,10)||0)*parseBRL(it.valor))}</div>
     </div>`).join('');
   const armed = isArmed('orc-'+o.id);
   return `<div class="oc-grid">
@@ -3181,14 +3171,14 @@ function orcFolhaHtml(o){
   const t = orcTotais(o);
   const linhas = (o.itens||[]).map(it=>`<tr><td>${esc(it.descricao||'')}</td><td class="r">${esc(it.qtd||'')}</td><td class="r">R$ ${fmtBRL(parseBRL(it.valor))}</td><td class="r">R$ ${fmtBRL((parseInt(it.qtd,10)||0)*parseBRL(it.valor))}</td></tr>`).join('');
   const pag = [];
-  if(o.pag.pix) pag.push(`<div><small>Pix à vista</small><b>R$ ${fmtBRL(t.pix)}</b>${t.pixPc>0?`<span>com ${String(o.pag.pixDesc).replace('.',',')}% de desconto extra</span>`:''}</div>`);
+  if(o.pag.pix) pag.push(`<div><small>Pix à vista</small><b>R$ ${fmtBRL(t.pix)}</b>${t.pixPc>0?`<span>com ${esc(String(o.pag.pixDesc).replace('.',','))}% de desconto extra</span>`:''}</div>`);
   if(o.pag.cartao) pag.push(`<div><small>Cartão de crédito</small><b>em até ${Math.max(1,parseInt(o.pag.parc,10)||1)}x</b><span>com acréscimo da taxa da maquininha</span></div>`);
   const contato = [b.cnpj?`CNPJ ${b.cnpj}`:'', b.email||'', b.telefone||''].filter(Boolean).map(esc).join(' · ');
   return `<div class="of-top"><div class="of-marca">${RITMO_ICONE}<div><div class="of-nome">${esc(b.nomeFantasia||'')}</div><div class="of-cnpj">${contato}</div></div></div><div class="of-tit"><b>Orçamento</b><span>${esc(o.numero)} · ${fmtDateBR(o.data)}</span></div></div>
    <div class="of-para"><div><small>Para</small><b>${esc(o.cliente||'—')}</b></div><div style="text-align:right"><small>Projeto</small><b>${esc(o.projeto||'—')}</b></div></div>
    <div class="of-txt">${esc(orcTexto(o))}</div>
    <table class="of-t"><thead><tr><th>Descrição</th><th class="r">Qtd</th><th class="r">Valor un.</th><th class="r">Subtotal</th></tr></thead><tbody>${linhas}</tbody></table>
-   <div class="of-total"><div class="l"><span>Soma</span><span>R$ ${fmtBRL(t.soma)}</span></div>${t.desc>0?`<div class="l"><span>Desconto${o.descTipo==='pc'?` (${String(o.descValor).replace('.',',')}%)`:''}</span><span>− R$ ${fmtBRL(t.desc)}</span></div>`:''}<div class="big"><span>Total</span><b>R$ ${fmtBRL(t.total)}</b></div></div>
+   <div class="of-total"><div class="l"><span>Soma</span><span>R$ ${fmtBRL(t.soma)}</span></div>${t.desc>0?`<div class="l"><span>Desconto${o.descTipo==='pc'?` (${esc(String(o.descValor).replace('.',','))}%)`:''}</span><span>− R$ ${fmtBRL(t.desc)}</span></div>`:''}<div class="big"><span>Total</span><b>R$ ${fmtBRL(t.total)}</b></div></div>
    ${pag.length ? `<div class="of-pag"><small class="of-pt">Forma de pagamento</small><div class="of-pg">${pag.join('')}</div>${o.pag.sinal?'<div class="of-ps">50% na aprovação para iniciar e 50% na entrega.</div>':''}</div>` : ''}
    <div class="of-pe"><span>ritmo. · sua produção, no ritmo certo</span><span>${esc(b.nomeFantasia||'')}</span></div>`;
 }
@@ -3275,7 +3265,7 @@ function orcAcao(action, btn){
   }
   if(action==='orc-desc-tipo'){ o.descTipo = btn.dataset.v; persist(); render(); return true; }
   if(action==='orc-texto-auto'){ o.textoEditado = false; o.texto = ''; persist(); render(); return true; }
-  if(action==='orc-pdf'){ orcGerarPDF(o); if(o.status==='rascunho'){ o.status='enviado'; persist(); render(); } return true; }
+  if(action==='orc-pdf'){ orcGerarPDF(o).catch(avisarErroDeAcao); if(o.status==='rascunho'){ o.status='enviado'; persist(); render(); } return true; }
   if(action==='orc-aprovar'){
     const nome = (o.cliente||'').trim();
     if(!nome){ showToast('Escreva o nome do cliente antes de aprovar.'); return true; }
@@ -3326,15 +3316,44 @@ function orcAcao(action, btn){
   return action.startsWith('orc-');
 }
 
-/* ---------- PDF do orcamento (jsPDF, mesma cara da previa) ---------- */
-function orcGerarPDF(o){
-  if(!window.jspdf || !window.jspdf.jsPDF){
-    showToast('Não consegui carregar o gerador de PDF. Verifique sua conexão com a internet e tente de novo.');
-    return;
+/* ---------- gerador de PDF (jsPDF 2.5.1 + jspdf-autotable 3.8.2) ----------
+   Vem junto com o app (pacotes do npm, nas mesmas versoes que antes vinham de
+   um site de fora), mas num arquivo separado que so e baixado quando se pede
+   o primeiro PDF — nao pesa a abertura. O service worker guarda esse arquivo
+   junto com o esqueleto, entao o PDF tambem sai sem internet. */
+let geradorPDF = null;
+function carregarPDF(){
+  if(!geradorPDF){
+    geradorPDF = Promise.all([import('jspdf'), import('jspdf-autotable')]).then(([m, tabela])=>{
+      const ligar = tabela.applyPlugin || (tabela.default && tabela.default.applyPlugin);
+      ligar(m.jsPDF); // liga o doc.autoTable(...)
+      return m.jsPDF;
+    });
+    geradorPDF.catch(()=>{ geradorPDF = null; }); // falhou: tenta de novo no proximo clique
   }
+  return geradorPDF;
+}
+async function pegarGeradorPDF(){
+  try{ return await carregarPDF(); }
+  catch(e){
+    console.error('Falha ao carregar o gerador de PDF', e);
+    showToast('Não consegui carregar o gerador de PDF. Verifique sua conexão com a internet e tente de novo.');
+    return null;
+  }
+}
+// as funcoes de PDF agora esperam o gerador chegar: um erro la dentro precisa
+// do mesmo aviso que os outros cliques dao
+function avisarErroDeAcao(err){
+  console.error(err);
+  showToast('Algo deu errado nessa ação. Nada foi perdido — tente de novo.');
+}
+
+/* ---------- PDF do orcamento (jsPDF, mesma cara da previa) ---------- */
+async function orcGerarPDF(o){
+  const jsPDF = await pegarGeradorPDF();
+  if(!jsPDF) return;
   const b = state.business || {};
   const t = orcTotais(o);
-  const { jsPDF } = window.jspdf;
   const doc = new jsPDF({unit:'pt', format:'a4'});
   const W = doc.internal.pageSize.getWidth(), Hp = doc.internal.pageSize.getHeight();
   const mx = 48; let y = 54;
@@ -3422,7 +3441,11 @@ function orcGerarPDF(o){
   setTimeout(()=> URL.revokeObjectURL(url), 60000);
 }
 
-function generatePDF(clientId, ym){
+async function generatePDF(clientId, ym){
+  if(!clientById(clientId) || videosDe(clientId, ym).length===0) return;
+  const jsPDF = await pegarGeradorPDF();
+  if(!jsPDF) return;
+  // le os dados so agora, depois da espera: e o que esta na tela neste momento
   const c = clientById(clientId);
   if(!c) return;
   const rows = videosDe(clientId, ym);
@@ -3431,11 +3454,6 @@ function generatePDF(clientId, ym){
   const mesNome = MES_NOME[m];
   const b = state.business;
 
-  if(!window.jspdf || !window.jspdf.jsPDF){
-    showToast('Não consegui carregar o gerador de PDF. Verifique sua conexão com a internet e tente de novo.');
-    return;
-  }
-  const { jsPDF } = window.jspdf;
   const doc = new jsPDF({unit:'pt', format:'a4'});
   const pageWidth = doc.internal.pageSize.getWidth();
   const marginX = 40;

@@ -26,7 +26,44 @@ function nomeBeta(mode) {
   };
 }
 
+// O gerador de PDF (jsPDF) fica num arquivo separado, baixado só quando se
+// pede um PDF. Aqui a página ganha um aviso de "pode ir buscando com calma"
+// (prefetch) pra esses arquivos separados: não atrasa a abertura e, de quebra,
+// o service worker (public/sw.js) enxerga o endereço e guarda o arquivo junto
+// com o esqueleto — é o que mantém o PDF funcionando sem internet.
+function avisarArquivosSeparados() {
+  return {
+    name: "avisar-arquivos-separados",
+    transformIndexHtml: {
+      order: "post",
+      handler(html, ctx) {
+        if (!ctx.bundle) return html;
+        return Object.values(ctx.bundle)
+          .filter((c) => c.type === "chunk" && !c.isEntry && !html.includes(c.fileName))
+          .map((c) => ({
+            tag: "link",
+            attrs: { rel: "prefetch", as: "script", crossorigin: true, href: "./" + c.fileName },
+            injectTo: "head",
+          }));
+      },
+    },
+  };
+}
+
 export default defineConfig(({ mode }) => ({
   base: "./",
-  plugins: [nomeBeta(mode)],
+  plugins: [nomeBeta(mode), avisarArquivosSeparados()],
+  resolve: {
+    alias: {
+      // a versão "módulo" do jspdf-autotable (o pacote só anuncia a outra)
+      "jspdf-autotable": path.resolve("node_modules/jspdf-autotable/dist/jspdf.plugin.autotable.mjs"),
+    },
+  },
+  build: {
+    rollupOptions: {
+      // extras opcionais do jsPDF (HTML/SVG dentro do PDF) que o Ritmo não usa:
+      // ficam de fora do app
+      external: ["html2canvas", "dompurify", "canvg"],
+    },
+  },
 }));

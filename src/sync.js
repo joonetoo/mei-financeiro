@@ -122,6 +122,7 @@ export function mergeState(base, local, remoto){
   const conflitos = [];
   const merged = m3(base === undefined ? {} : base, local, remoto, [], conflitos);
   reparar(merged, local, remoto, base);
+  repararNotas(merged, local, remoto, base, conflitos);
   return { merged, conflitos };
 }
 
@@ -141,6 +142,60 @@ function reparar(m, l, r, b){
     if(!c) continue;
     m.clients.push(clone(c));
     if(Array.isArray(m.clientOrder) && !m.clientOrder.includes(cid)) m.clientOrder.push(cid);
+  }
+}
+
+// Uma nota mora na "gaveta" do ano dela (notas["2026"]) e pode trocar de
+// gaveta quando a data passa pra outro ano. A junção acima olha gaveta por
+// gaveta, então se um aparelho MOVEU a nota e o outro EDITOU (ou moveu pra
+// outro ano), ela sairia nas duas gavetas — a mesma nota contando duas vezes
+// no limite do MEI. Aqui a nota volta a ser uma só: os campos são juntados
+// como qualquer item (os dois mudaram o mesmo campo = fica o daqui e o de lá
+// vai pra `conflitos`) e a gaveta segue a mesma regra (só um moveu = vale a
+// mudança dele; os dois moveram pra anos diferentes = fica a daqui).
+// Só mexe em nota que cada aparelho tinha UMA vez: ids repetidos que já
+// existiam antes (backup antigo importado) ficam como estão.
+function ondeEstaNota(s, id){
+  const achados = [];
+  if(!isObj(s) || !isObj(s.notas)) return achados;
+  for(const ano of Object.keys(s.notas)){
+    const lista = s.notas[ano];
+    if(!Array.isArray(lista)) continue;
+    lista.forEach((n, idx) => { if(isIdItem(n) && String(n.id) === id) achados.push({ ano, idx, nota: n }); });
+  }
+  return achados;
+}
+function repararNotas(m, l, r, b, conflitos){
+  if(!isObj(m) || !isObj(m.notas)) return;
+  const vezes = new Map();
+  for(const ano of Object.keys(m.notas)){
+    if(!Array.isArray(m.notas[ano])) continue;
+    for(const n of m.notas[ano]) if(isIdItem(n)) vezes.set(String(n.id), (vezes.get(String(n.id)) || 0) + 1);
+  }
+  for(const [id, n] of vezes){
+    if(n < 2) continue;
+    const ls = ondeEstaNota(l, id), rs = ondeEstaNota(r, id), bs = ondeEstaNota(b, id);
+    if(ls.length !== 1 || rs.length !== 1 || bs.length > 1) continue;
+    const lo = ls[0], ro = rs[0], bo = bs[0];
+    if(lo.ano === ro.ano) continue; // não foi troca de gaveta: não é caso daqui
+    const nota = m3(bo ? bo.nota : undefined, lo.nota, ro.nota, ['notas', '#' + id], conflitos);
+    // gaveta: só o outro aparelho moveu -> a de lá; senão, a daqui
+    const ano = (bo && lo.ano === bo.ano) ? ro.ano : lo.ano;
+    let posto = false;
+    for(const a of Object.keys(m.notas)){
+      const lista = m.notas[a];
+      if(!Array.isArray(lista)) continue;
+      for(let i = lista.length - 1; i >= 0; i--){
+        if(!isIdItem(lista[i]) || String(lista[i].id) !== id) continue;
+        if(a === ano && !posto){ lista[i] = nota; posto = true; }
+        else lista.splice(i, 1);
+      }
+    }
+    if(!posto){
+      if(!Array.isArray(m.notas[ano])) m.notas[ano] = [];
+      m.notas[ano].push(nota);
+    }
+    if(Array.isArray(m.notasYears) && !m.notasYears.includes(ano)){ m.notasYears.push(ano); m.notasYears.sort(); }
   }
 }
 
