@@ -18,6 +18,15 @@
         "export PATH=\"/Users/joelneto/.nvm/versions/node/v24.21.0/bin:$PATH\" && VITE_STORAGE_KEY=jnf-financeiro-teste exec npx vite --port 5192 --strictPort"
       ],
       "port": 5192
+    },
+    {
+      "name": "ritmo-falsa",
+      "runtimeExecutable": "/bin/bash",
+      "runtimeArgs": [
+        "-c",
+        "export PATH=\"/Users/joelneto/.nvm/versions/node/v24.21.0/bin:$PATH\" && VITE_NUVEM_FALSA=1 VITE_STORAGE_KEY=ritmo-previa-falsa exec npx vite --port 5197 --strictPort"
+      ],
+      "port": 5197
     }
   ]
 }

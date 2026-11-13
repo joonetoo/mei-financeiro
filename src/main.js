@@ -1006,7 +1006,9 @@ function metaYm(){
 }
 
 function painelCobrar(){
-  const cards = state.clientOrder.map(id=>{
+  // um cartao so, com uma linha por cliente (refino 2026-11): a linha inteira
+  // continua sendo o botao que abre o cliente
+  const linhas = state.clientOrder.map(id=>{
     const c = clientById(id);
     if(!c) return '';
     const ym = periodoAberto(id);
@@ -1025,19 +1027,23 @@ function painelCobrar(){
     else pill = `<span class="pill ok">em andamento</span>`;
     const desde = inicioPeriodo(id, ym);
     const quando = dias>0 ? `em ${plural(dias,'dia','dias')}` : dias===0 ? 'hoje' : '';
-    const rodape = fechouHoje
-      ? `<span>${MES_NOME[shiftYm(ym,-1).slice(5)]} fechado hoje · nota de <b class="sensitive">R$ ${fmtBRL(parseBRL(ant.valor))}</b></span>`
-      : `<span>Fecha ${aprox ? 'por volta de' : 'dia'} <b>${ddmm(prevista)}</b></span><span>${quando}</span>`;
-    return `<button type="button" class="card cob" data-action="abrir-cliente" data-client="${esc(id)}">
-      <span class="top"><span class="chip ${chipClass(id)}">${esc(siglaDe(id))}</span><span class="nm">${esc(c.nome)}</span>${pill}</span>
-      <span class="per">Período de ${nomeMesYm(ym)}</span><span class="big sensitive">R$ ${fmtBRL(total)}</span>
-      <span class="sub">${plural(rows.length,'vídeo','vídeos')}${desde ? ` · desde ${ddmm(desde)}` : ''}</span>
-      <span class="close-l">${rodape}</span>
+    // 2a linha: quando fecha (ou a nota de hoje) + o selo do estado
+    const fecha = fechouHoje
+      ? `<span>${MES_NOME[shiftYm(ym,-1).slice(5)]} fechado hoje</span><span class="c-q"><span>nota de <b class="sensitive">R$ ${fmtBRL(parseBRL(ant.valor))}</b></span>${pill}</span>`
+      : `<span>fecha ${aprox ? 'por volta de' : 'dia'} <b>${ddmm(prevista)}</b></span><span class="c-q">${quando ? `<span>${quando}</span>` : ''}${pill}</span>`;
+    return `<button type="button" class="cob" data-action="abrir-cliente" data-client="${esc(id)}">
+      <span class="chip ${chipClass(id)}">${esc(siglaDe(id))}</span>
+      <span class="c-txt"><span class="c-nome"><b class="nm">${esc(c.nome)}</b><span class="per">período de ${nomeMesYm(ym)}</span></span>
+      <span class="c-vid"><span>${plural(rows.length,'vídeo','vídeos')}</span>${desde ? `<span>desde ${ddmm(desde)}</span>` : ''}</span>
+      <span class="c-fecha">${fecha}</span></span>
+      <b class="c-val sensitive">R$ ${fmtBRL(total)}</b>
     </button>`;
   }).join('');
   const emAberto = state.clientOrder.reduce((s,id)=> s + (clientById(id) ? monthTotal(id, periodoAberto(id)) : 0), 0);
-  return `<div class="sec-head"><h2>A cobrar</h2><span class="sub">em aberto: <b class="sensitive">R$ ${fmtBRL(emAberto)}</b> · toque num cliente pra abrir</span></div>
-    <div class="cob-row${state.clientOrder.length>3?' rola':''}">${cards}</div>`;
+  return `<div class="card card-cobrar s7">
+    <div class="head"><h2 class="tit">A cobrar</h2><span class="sub">em aberto: <b class="sensitive">R$ ${fmtBRL(emAberto)}</b> · toque num cliente pra abrir</span></div>
+    ${linhas ? `<div class="cob-lista">${linhas}</div>` : '<p class="msg">Nenhuma aba de cliente ainda.</p>'}
+  </div>`;
 }
 
 // bloco do período na aba do cliente: status + botão de fechar (com confirmação)
@@ -1150,7 +1156,7 @@ function posicionarCalendario(){
 
 function fecharPeriodoHtml(cid, ym, rows, total){
   if(periodoFechado(cid, ym)) return '';
-  return `<button class="btn gold" data-action="fechar-periodo" data-client="${esc(cid)}" data-ym="${esc(ym)}" ${rows.length===0?'disabled':''}>Fechar período</button>`;
+  return `<button class="btn gold-line" data-action="fechar-periodo" data-client="${esc(cid)}" data-ym="${esc(ym)}" ${rows.length===0?'disabled':''}>Fechar período</button>`;
 }
 
 // janela de fechar periodo: card de vidro no Mac, tela cheia no celular (CSS)
@@ -1224,35 +1230,6 @@ function metaDoMes(ym){ return P.metaDoMes(state.metas, ym); }
 
 function diasNoMes(year, month){ return new Date(Number(year), Number(month), 0).getDate(); }
 
-function painelLimite(){
-  const {total, limite, pctClamped, msgClass, restante} = limiteProgress(REAL_YEAR);
-  const statusCls = msgClass || 'ok';
-  const statusLabel = statusCls==='danger' ? 'Limite excedido' : statusCls==='warn' ? 'Atenção' : 'Tranquilo';
-  // quanto do ano ja passou, em %: a marca de ritmo na barra. Barra atras
-  // da marca = faturando abaixo do que o limite comportaria.
-  const mesesDecorridos = parseInt(REAL_MONTH, 10);
-  const pacePct = Math.min((mesesDecorridos/12)*100, 100);
-  let msg;
-  if(restante < 0){
-    msg = `Limite ultrapassado em <b class="sensitive">R$ ${fmtBRL(Math.abs(restante))}</b>. Fique atento ao desenquadramento.`;
-  } else if(total > 0){
-    const projecao = (total/mesesDecorridos)*12;
-    const folga = limite - projecao;
-    msg = folga >= 0
-      ? `No ritmo atual fecha dezembro em <b class="sensitive">R$ ${fmtBRL(projecao)}</b> — <span class="sensitive">R$ ${fmtBRL(folga)}</span> de folga.`
-      : `No ritmo atual fecha dezembro em <b class="sensitive">R$ ${fmtBRL(projecao)}</b> — <span class="sensitive">R$ ${fmtBRL(Math.abs(folga))}</span> acima do limite.`;
-  } else {
-    msg = `Nenhuma nota lançada em ${REAL_YEAR} ainda.`;
-  }
-  return `<div class="card card-hero s5">
-    <div class="head"><span class="label">Ainda cabe no limite de ${REAL_YEAR}</span><span class="pill ${statusCls}">${statusLabel}</span></div>
-    <div class="big sensitive">R$ ${fmtBRL(Math.max(restante,0))}</div>
-    <div class="bar"><div class="fill ${msgClass}" style="width:${pctClamped.toFixed(1)}%"></div><div class="pace" style="left:${pacePct.toFixed(1)}%" title="ritmo do ano"></div></div>
-    <div class="foot"><span>${pctClamped.toFixed(1).replace('.',',')}% usado</span><span class="pace-t">ritmo do ano: ${pacePct.toFixed(0)}%</span></div>
-    <p class="msg">${msg}</p>
-  </div>`;
-}
-
 function painelMeta(ym){
   const atual = monthKey(REAL_YEAR, REAL_MONTH);
   const ehAtual = ym===atual;
@@ -1263,8 +1240,9 @@ function painelMeta(ym){
   const meta = metaDoMes(ym);
   const podeVoltar = ym > semanasPrimeiroYm({});
   const seta = (dir, ok, rotulo, path)=>`<button type="button" data-action="meta-mes" data-dir="${dir}" aria-label="${rotulo}"${ok?'':' disabled'}><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="${path}"/></svg></button>`;
-  const nav = `<div class="msw" role="group" aria-label="Trocar mês da meta">${seta(-1, podeVoltar, 'Mês anterior', 'm15 18-6-6 6-6')}<span>${mesNome} ${ano}</span>${seta(1, !ehAtual, 'Próximo mês', 'm9 18 6-6-6-6')}</div>`;
-  const head = r => `<div class="head head-meta"><span class="label">Meta de ${mesTxt}</span>${nav}</div>${r ? `<div class="meta-acts">${r}</div>` : ''}`;
+  // (o mes ja esta no rotulo "Meta de <mes>"; aqui ficam so as setas)
+  const nav = `<div class="msw" role="group" aria-label="Trocar mês da meta: ${mesNome} ${ano}">${seta(-1, podeVoltar, 'Mês anterior', 'm15 18-6-6 6-6')}${seta(1, !ehAtual, 'Próximo mês', 'm9 18 6-6-6-6')}</div>`;
+  const head = (pill, extra) => `<div class="head head-meta"><span class="meta-tit"><span class="label">Meta de ${mesTxt}</span>${pill||''}</span><span class="meta-acts">${nav}${extra||''}</span></div>`;
   // mês anterior ainda com cliente sem fechar: aviso com atalho pra ele
   let lembrete = '';
   if(ehAtual){
@@ -1297,8 +1275,9 @@ function painelMeta(ym){
       : '';
     lembrete += `<button type="button" class="meta-fora" data-action="meta-mes" data-dir="${-ymDiff(ym, abaFora)}">Fora daqui: <b class="sensitive">R$ ${fmtBRL(fora.v)}</b> feitos em ${mesNome} foram ${Object.keys(fora.abas).length>1 ? 'pra abas de meses anteriores' : `na aba de ${nmFora}`} (${plural(fora.n,'vídeo','vídeos')}, ${esc(listaNomes(fora.clientes.map(nomeCurto)))}).${resumo} ›</button>`;
   }
+  const avisos = lembrete ? `<div class="meta-avisos">${lembrete}</div>` : '';
   if(ui.metaEditing){
-    return `<div class="card card-meta s4">${head()}
+    return `<div class="card card-meta s6">${head()}
       <form class="meta-form" data-meta-form>
         <label for="meta-in">Quanto quer faturar em ${mesTxt}?</label>
         <div class="money-in"><span>R$</span><input id="meta-in" inputmode="decimal" autocomplete="off" value="${esc(ui.metaDraft)}" placeholder="0,00"></div>
@@ -1308,16 +1287,16 @@ function painelMeta(ym){
     </div>`;
   }
   if(!meta){
-    return `<div class="card card-meta s4">${head()}
+    return `<div class="card card-meta s6">${head()}
       <div class="vrow"><span class="big sensitive">R$ ${fmtBRL(fat)}</span><span class="of">${ehAtual ? 'faturado até agora' : 'faturado no mês'}</span></div>
-      <p class="msg">Defina quanto quer faturar ${ehAtual ? 'este mês' : 'em '+mesTxt} e o app mostra se você está perto ou longe.</p>
-      <button class="btn-dark" style="align-self:flex-start" type="button" data-action="meta-edit">Definir meta</button>
-      ${lembrete}
+      <div class="meta-pe"><p class="msg">Defina quanto quer faturar ${ehAtual ? 'este mês' : 'em '+mesTxt} e o app mostra se você está perto ou longe.</p>
+      <button class="btn-dark" type="button" data-action="meta-edit">Definir meta</button>${avisos}</div>
     </div>`;
   }
-  const editBtn = `<button class="edit-btn" type="button" data-action="meta-edit" aria-label="Editar meta"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>Editar</button>`;
+  const editBtn = `<button class="edit-btn" type="button" data-action="meta-edit" aria-label="Editar meta"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg><span>Editar</span></button>`;
   const pct = fat/meta*100, falta = meta-fat;
-  let pill, msg, footR, paceHtml = '';
+  // `nums` = os dois numeros grandes do pe (falta / por dia); nos outros casos fica a frase
+  let pill, msg, footR, paceHtml = '', nums = '';
   if(ehAtual){
     const dia = now.getDate(), dim = diasNoMes(REAL_YEAR, REAL_MONTH), left = dim-dia;
     const pace = dia/dim*100;
@@ -1331,9 +1310,12 @@ function painelMeta(ym){
       // com R$ 0, ainda nao da pra estar "atras"
       const ritmo = (dia-1)/dim*100;
       pill = pct >= ritmo-2 ? `<span class="pill ok">No ritmo</span>` : `<span class="pill warn">Um pouco atrás</span>`;
-      msg = left > 0
-        ? `Faltam <b class="sensitive">R$ ${fmtBRL(falta)}</b> em ${plural(left,'dia','dias')}. Dá <b class="sensitive">R$ ${fmtBRL(falta/left)}</b> por dia.`
-        : `Faltam <b class="sensitive">R$ ${fmtBRL(falta)}</b> e o mês termina hoje.`;
+      if(left > 0){
+        nums = `<div class="mn"><b class="sensitive">R$ ${fmtBRL(falta)}</b><span>faltam, em ${plural(left,'dia','dias')}</span></div>
+          <div class="mn"><b class="sensitive">R$ ${fmtBRL(falta/left)}</b><span>por dia pra chegar lá</span></div>`;
+      } else {
+        msg = `Faltam <b class="sensitive">R$ ${fmtBRL(falta)}</b> e o mês termina hoje.`;
+      }
     }
   } else {
     // mês que já passou: segue somando enquanto algum cliente não fechou
@@ -1350,23 +1332,22 @@ function painelMeta(ym){
       msg = `Faltaram <b class="sensitive">R$ ${fmtBRL(falta)}</b> pra meta de ${mesNome}.`;
     }
   }
-  return `<div class="card card-meta s4">${head(pill+editBtn)}
-    <div class="vrow"><span class="big sensitive">R$ ${fmtBRL(fat)}</span><span class="of sensitive">de R$ ${fmtBRL(meta)}</span></div>
+  return `<div class="card card-meta s6">${head(pill, editBtn)}
+    <div class="vrow"><span class="big sensitive">R$ ${fmtBRL(fat)}</span><span class="of sensitive">de R$ ${fmtBRL(meta)}</span><span class="vrow-r">${pct.toFixed(1).replace('.',',')}% da meta · <span class="pace-t">${footR}</span></span></div>
     <div class="bar"><div class="fill" style="width:${Math.min(pct,100).toFixed(1)}%"></div>${paceHtml}</div>
-    <div class="foot"><span>${pct.toFixed(1).replace('.',',')}% da meta</span><span class="pace-t">${footR}</span></div>
-    <p class="msg">${msg}</p>
-    ${lembrete}
+    <div class="meta-pe">${nums || `<p class="msg">${msg}</p>`}${avisos}</div>
   </div>`;
 }
 
 function painelHoje(porData){
   const hoje = porData[TODAY_ISO] || {v:0, n:0};
   const ontem = porData[addDays(TODAY_ISO,-1)] || {v:0, n:0};
-  return `<div class="card s4">
-    <span class="label">Hoje</span><span class="big sensitive">R$ ${fmtBRL(hoje.v)}</span>
+  const txt = fmtBRL(hoje.v);
+  return `<div class="card card-hoje s2">
+    <span class="label">Hoje</span><span class="big sensitive${txt.length>6 ? ' longo' : ''}">R$ ${txt}</span>
     <p class="sub">${DIA_SEMANA[now.getDay()]}, ${ddmm(TODAY_ISO)} · ${plural(hoje.n,'vídeo','vídeos')}</p>
     <p class="sub">Ontem: <b class="sensitive">R$ ${fmtBRL(ontem.v)}</b></p>
-    <button class="quick" type="button" data-action="go-lancar">+ Lançar vídeo</button>
+    <button class="quick acao" type="button" data-action="go-lancar">+ Lançar vídeo</button>
   </div>`;
 }
 
@@ -1388,7 +1369,7 @@ function painelSemana(porData){
     if(d.i > idxHoje && d.v===0){
       return `<div class="wb future"><span class="v">&nbsp;</span><div class="col"></div><span class="d">${nomes[d.i]}</span></div>`;
     }
-    const h = d.v>0 ? Math.max(6, Math.round(d.v/max*80)) : 3;
+    const h = d.v>0 ? Math.max(5, Math.round(d.v/max*70)) : 3;
     return `<div class="wb${d.i===idxHoje?' today':''}" title="R$ ${fmtBRL(d.v)}"><span class="v sensitive">${fmtCurto(d.v)}</span><div class="col" style="height:${h}px"></div><span class="d">${d.i===idxHoje?'hoje':nomes[d.i]}</span></div>`;
   }).join('');
   const intervalo = seg.slice(5,7)===dom.slice(5,7) ? `${seg.slice(8,10)} a ${ddmm(dom)}` : `${ddmm(seg)} a ${ddmm(dom)}`;
@@ -1413,18 +1394,42 @@ function painelSemana(porData){
     }).join('');
     divisao = `<div class="wk-split" aria-hidden="true">${faixa}</div><p class="wk-split-t">${txt}</p>`;
   }
-  return `<div class="card card-week s8">
-    <div class="left"><span class="label">Esta semana</span><span class="big sensitive">R$ ${fmtBRL(total)}</span>
-    <p class="sub">${intervalo} · ${plural(n,'vídeo','vídeos')}</p><p class="sub">${passadaLabel}: <b class="sensitive">R$ ${fmtBRL(passada)}</b></p>${divisao}</div>
-    <div class="wbars" role="img" aria-label="Faturamento por dia desta semana">${bars}</div>
+  return `<div class="card card-week s4">
+    <div class="head"><span class="label">Esta semana</span><span class="sub">${intervalo} · ${plural(n,'vídeo','vídeos')}</span></div>
+    <div class="wk-corpo">
+      <div class="left"><span class="big sensitive">R$ ${fmtBRL(total)}</span>
+      <p class="sub">${passadaLabel}: <b class="sensitive">R$ ${fmtBRL(passada)}</b></p></div>
+      <div class="wbars" role="img" aria-label="Faturamento por dia desta semana">${bars}</div>
+    </div>
+    ${divisao}
   </div>`;
 }
 
+// "O ano": faturado + limite MEI num cartao so (refino 2026-11). Os dois
+// numeros, a barra do limite com a marca do ritmo do ano, a comparacao com o
+// ano anterior e a projecao de dezembro.
 function painelAno(){
-  const total = notasYearTotal(REAL_YEAR);
+  const {total, limite, pctClamped, msgClass, restante} = limiteProgress(REAL_YEAR);
   const n = (state.notas[REAL_YEAR]||[]).length;
   const media = total / Number(REAL_MONTH); // jan ate o mes atual
-  const rodape = `<div class="kv"><span>${plural(n,'nota','notas')}</span><span>média <b class="sensitive">R$ ${fmtBRL(media)}</b>/mês</span></div>`;
+  const statusCls = msgClass || 'ok';
+  const statusLabel = statusCls==='danger' ? 'Limite excedido' : statusCls==='warn' ? 'Atenção ao limite' : 'Limite tranquilo';
+  // quanto do ano ja passou, em %: a marca de ritmo na barra. Barra atras
+  // da marca = faturando abaixo do que o limite comportaria.
+  const mesesDecorridos = parseInt(REAL_MONTH, 10);
+  const pacePct = Math.min((mesesDecorridos/12)*100, 100);
+  let proj;
+  if(restante < 0){
+    proj = `Limite ultrapassado em <b class="sensitive">R$ ${fmtBRL(Math.abs(restante))}</b>. Fique atento ao desenquadramento.`;
+  } else if(total > 0){
+    const projecao = (total/mesesDecorridos)*12;
+    const folga = limite - projecao;
+    proj = folga >= 0
+      ? `No ritmo atual fecha dezembro em <b class="sensitive">R$ ${fmtBRL(projecao)}</b> — <span class="sensitive">R$ ${fmtBRL(folga)}</span> de folga.`
+      : `No ritmo atual fecha dezembro em <b class="sensitive">R$ ${fmtBRL(projecao)}</b> — <span class="sensitive">R$ ${fmtBRL(Math.abs(folga))}</span> acima do limite.`;
+  } else {
+    proj = `Nenhuma nota lançada em ${REAL_YEAR} ainda.`;
+  }
   // comparacao com o ano anterior inteiro (so aparece se houver notas nele)
   const anoAnt = String(Number(REAL_YEAR)-1);
   const totalAnt = notasYearTotal(anoAnt);
@@ -1441,10 +1446,17 @@ function painelAno(){
     </div>
     <p class="msg">${msg}</p>`;
   }
-  return `<div class="card card-year s3">
-    <span class="label">Faturado em ${REAL_YEAR}</span><span class="big sensitive">R$ ${fmtBRL(total)}</span>
+  return `<div class="card card-ano s5">
+    <div class="head"><h2 class="tit">O ano de ${REAL_YEAR}</h2><span class="pill ${statusCls}">${statusLabel}</span></div>
+    <div class="ano-nums">
+      <div class="an an-fat"><span class="label">Faturado</span><span class="big sensitive">R$ ${fmtBRL(total)}</span>
+        <span class="sub">${plural(n,'nota','notas')} · média <b class="sensitive">R$ ${fmtBRL(media)}</b>/mês</span></div>
+      <div class="an an-lim"><span class="label">Ainda cabe no limite MEI</span><span class="big sensitive">R$ ${fmtBRL(Math.max(restante,0))}</span>
+        <span class="sub">${pctClamped.toFixed(1).replace('.',',')}% usado · <span class="pace-t">ritmo do ano: ${pacePct.toFixed(0)}%</span></span></div>
+    </div>
+    <div class="bar"><div class="fill ${msgClass}" style="width:${pctClamped.toFixed(1)}%"></div><div class="pace" style="left:${pacePct.toFixed(1)}%" title="ritmo do ano"></div></div>
     ${comp}
-    ${rodape}
+    <p class="msg">${proj}</p>
   </div>`;
 }
 
@@ -1473,8 +1485,8 @@ function painelDiaADia(porData, ym){
     xs += `<span class="${key?'k':''}${tod?' t':''}${near?' near':''}">${d}</span>`;
   });
   const avgLine = avg>0 ? `<div class="avg" style="bottom:${(avg/MAX*100).toFixed(1)}%"><span class="sensitive">média R$ ${fmtBRL(avg)}</span></div>` : '';
-  return `<div class="card s8">
-    <div class="head"><span class="label">${MES_NOME[REAL_MONTH]} dia a dia</span><span class="sub">fins de semana em cinza</span></div>
+  return `<div class="card card-dias s12">
+    <div class="head"><h2 class="tit">${MES_NOME[REAL_MONTH]} dia a dia</h2><span class="sub">fins de semana em cinza</span></div>
     <div class="chart" style="--dias:${dim}">
       <div class="yaxis sensitive"><span>${fmtCurto(MAX)}</span><span>${fmtCurto(step)}</span><span>0</span></div>
       <div class="plot">
@@ -1553,9 +1565,15 @@ function painelSemanas(porData){
   const vazio = total===0 ? `<div class="wempty">Nenhum vídeo em ${mesNome.toLowerCase()}</div>` : '';
   const podeVoltar = ym > semanasPrimeiroYm(porData);
   const seta = (dir, ok, rotulo, path)=>`<button type="button" data-action="semanas-mes" data-dir="${dir}" aria-label="${rotulo}"${ok?'':' disabled'}><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="${path}"/></svg></button>`;
-  return `<div class="card card-semanas s12">
-    <div class="head"><span class="label">Semana a semana</span>
-      <div class="msw" role="group" aria-label="Trocar mês">${seta(-1, podeVoltar, 'Mês anterior', 'm15 18-6-6 6-6')}<span>${mesNome} ${ano}</span>${seta(1, !ehAtual, 'Próximo mês', 'm9 18 6-6-6-6')}</div>
+  // resumo do mes na linha do titulo (antes ficava em tres numeros embaixo)
+  const resumo = `<span class="sem-resumo">
+      <span>${mesNome.toLowerCase()}: <b class="sensitive">${total>0 ? 'R$ '+fmtBRL(total) : '—'}</b>${nTotal ? ' · '+plural(nTotal,'vídeo','vídeos') : ''}</span>
+      <span>${media>0 ? '<i class="avg-key" aria-hidden="true"></i>' : ''}média por semana <b class="sensitive">${media>0 ? 'R$ '+fmtBRL(media) : '—'}</b></span>
+      <span>melhor semana <b class="sensitive">${melhor ? 'R$ '+fmtBRL(melhor.v) : '—'}</b>${melhor ? ' · '+melhor.label+'/'+mes : ''}</span>
+    </span>`;
+  return `<div class="card card-semanas s8">
+    <div class="head"><h2 class="tit">Semana a semana</h2>${resumo}
+      <div class="msw" role="group" aria-label="Trocar mês: ${mesNome} ${ano}">${seta(-1, podeVoltar, 'Mês anterior', 'm15 18-6-6 6-6')}${seta(1, !ehAtual, 'Próximo mês', 'm9 18 6-6-6-6')}</div>
     </div>
     <div class="chart">
       <div class="yaxis sensitive"><span>${fmtCurto(MAX)}</span><span>${fmtCurto(step)}</span><span>0</span></div>
@@ -1565,11 +1583,6 @@ function painelSemanas(porData){
         ${avgLine}${vazio}
       </div>
       <div class="wxaxis" style="${cols}">${xs}</div>
-    </div>
-    <div class="stats3">
-      <div><b class="sensitive">${total>0 ? 'R$ '+fmtBRL(total) : '—'}</b><span>total de ${mesNome.toLowerCase()}${nTotal ? ' · '+plural(nTotal,'vídeo','vídeos') : ''}</span></div>
-      <div><b class="sensitive">${media>0 ? 'R$ '+fmtBRL(media) : '—'}</b><span>${media>0 ? '<i class="avg-key" aria-hidden="true"></i>' : ''}média por semana</span></div>
-      <div><b class="sensitive">${melhor ? 'R$ '+fmtBRL(melhor.v) : '—'}</b><span>melhor semana${melhor ? ' · '+melhor.label+'/'+mes : ''}</span></div>
     </div>
   </div>`;
 }
@@ -1583,9 +1596,9 @@ function painelClientes(ym){
     const e = prod[id] || {v:0, n:0};
     return {id, nome:c.nome, v:e.v, n:e.n};
   }).filter(c=>c && c.v>0).sort((a,b)=>b.v-a.v);
-  const head = `<div class="head"><span class="label">Por cliente em ${mesNome}</span></div>`;
+  const head = `<div class="head"><h2 class="tit">Por cliente em ${mesNome}</h2></div>`;
   if(!lista.length){
-    return `<div class="card s4">${head}<p class="msg">Nenhum vídeo em ${mesNome} ainda.</p></div>`;
+    return `<div class="card card-clientes s4">${head}<p class="msg">Nenhum vídeo em ${mesNome} ainda.</p></div>`;
   }
   const tot = lista.reduce((s,c)=>s+c.v, 0), max = lista[0].v;
   const stack = lista.map(c=>`<i class="${chipClass(c.id)}" style="flex:${c.v}"></i>`).join('');
@@ -1595,7 +1608,7 @@ function painelClientes(ym){
     <span class="track"><i class="${chipClass(c.id)}" style="width:${(c.v/max*100).toFixed(1)}%"></i></span>
     <span class="meta-l">${plural(c.n,'vídeo','vídeos')} · ${(c.v/tot*100).toFixed(0)}%</span>
   </div>`).join('');
-  return `<div class="card s4">${head}<div class="stack">${stack}</div><div class="clients">${rows}</div></div>`;
+  return `<div class="card card-clientes s4">${head}<div class="stack">${stack}</div><div class="clients">${rows}</div></div>`;
 }
 
 function painelNotas(){
@@ -1627,9 +1640,9 @@ function painelNotas(){
       : `${periodo}: <b class="sensitive">R$ ${fmtBRL(media)}</b> por mês, acima da linha. Nesse ritmo o limite do ano aperta.`;
   }
   return `<div class="card s7">
-    <div class="head"><span class="label">Notas emitidas por mês · ${REAL_YEAR}</span><span class="sub">total <b class="sensitive">R$ ${fmtBRL(notasYearTotal(REAL_YEAR))}</b></span></div>
+    <div class="head"><h2 class="tit">Notas emitidas por mês · ${REAL_YEAR}</h2><span class="sub">total <b class="sensitive">R$ ${fmtBRL(notasYearTotal(REAL_YEAR))}</b></span></div>
     <div class="mchart">
-      <div class="yaxis sensitive" style="height:170px"><span>${mil(MAX)}</span><span>${mil(step*2)}</span><span>${mil(step)}</span><span>0</span></div>
+      <div class="yaxis sensitive"><span>${mil(MAX)}</span><span>${mil(step*2)}</span><span>${mil(step)}</span><span>0</span></div>
       <div class="mplot">
         <div class="grid-l" style="bottom:33.33%"></div><div class="grid-l" style="bottom:66.66%"></div>
         <div class="mcols">${cols}</div>
@@ -1661,7 +1674,7 @@ function painelRecentes(){
     </div>`;
   }).join('');
   return `<div class="card s5">
-    <div class="head"><span class="label">Últimos vídeos</span><button class="quick" type="button" data-action="go-lancar">Ver todos</button></div>
+    <div class="head"><h2 class="tit">Últimos vídeos</h2><button class="quick" type="button" data-action="go-lancar">Ver todos</button></div>
     ${rows ? `<div class="recent">${rows}</div>` : '<p class="msg">Nenhum vídeo lançado ainda.</p>'}
   </div>`;
 }
@@ -1669,16 +1682,17 @@ function painelRecentes(){
 function renderPainel(){
   const ym = monthKey(REAL_YEAR, REAL_MONTH);
   const porData = videosPorData();
+  // ordem do refino 2026-11: meta + hoje + semana | a cobrar + o ano |
+  // semana a semana + por cliente | dia a dia | notas por mes + ultimos videos
   return `<div class="dash${ui.screenAnim ? ' screen-in' : ''}">
-    ${painelAno()}
-    ${painelLimite()}
     ${painelMeta(metaYm())}
-    ${painelCobrar()}
     ${painelHoje(porData)}
     ${painelSemana(porData)}
+    ${painelCobrar()}
+    ${painelAno()}
     ${painelSemanas(porData)}
-    ${painelDiaADia(porData, ym)}
     ${painelClientes(metaYm())}
+    ${painelDiaADia(porData, ym)}
     ${painelNotas()}
     ${painelRecentes()}
   </div>`;
@@ -1688,8 +1702,9 @@ function iconOrc(size=15){return `<svg width="${size}" height="${size}" viewBox=
 function iconChart(size=15){return `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v18h18"/><path d="M7 15l4-4 3 3 5-6"/></svg>`;}
 function iconList(size=15){return `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/></svg>`;}
 
-/* topo (2026-09-29): marca grande + slogan a esquerda, saudacao + data a direita.
-   Nome/CNPJ da empresa saem do topo (continuam no PDF e em Configuracoes). */
+/* topo (refino 2026-11): uma linha so — marca pequena, menu no centro,
+   saudacao em duas linhas (nome / data · estado do salvamento) e o olho.
+   O slogan saiu daqui (continua na tela de entrada e no "sem internet"). */
 const DIA_LONGO = ['Domingo','Segunda','Terça','Quarta','Quinta','Sexta','Sábado'];
 const MES_CAP = ['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'];
 function nomeSaudacao(){
@@ -1699,16 +1714,17 @@ function nomeSaudacao(){
   return ((b.nomeFantasia||'').trim().split(/\s+/)[0]) || '';
 }
 function topoMarcaHtml(){
+  return `<span class="tr-marca"><span class="tr-ic">${RITMO_ICONE}</span><span class="tr-wm">ritmo<i>.</i></span></span>`;
+}
+function topoSaudacaoHtml(){
   const agora = new Date();
   const h = agora.getHours();
   const oi = h < 12 ? 'Bom dia' : h < 18 ? 'Boa tarde' : 'Boa noite';
   const nome = nomeSaudacao();
   const dd = String(agora.getDate()).padStart(2,'0'), mm = String(agora.getMonth()+1).padStart(2,'0');
-  return `<span class="tr-ic">${RITMO_ICONE}</span>
-      <span class="tr-wm">ritmo<i>.</i></span>
-      <span class="tr-slo">sua produção, no ritmo certo</span>
-      <span class="tr-oi">${oi}${nome ? `, <em>${esc(nome)}</em>` : ''}</span>
-      <span class="tr-dt"><span class="longo">${DIA_LONGO[agora.getDay()]}, ${agora.getDate()} de ${MES_CAP[agora.getMonth()]}</span><span class="curto">${DIA_LONGO[agora.getDay()].slice(0,3)}, ${dd}/${mm}</span></span>`;
+  const semana = DIA_LONGO[agora.getDay()].toLowerCase();
+  return `<span class="tr-oi">${oi}${nome ? `, <em>${esc(nome)}</em>` : ''}</span>
+      <span class="tr-dt"><span class="longo">${semana}, ${agora.getDate()} de ${MES_CAP[agora.getMonth()].toLowerCase()}</span><span class="curto">${semana.slice(0,3)}, ${dd}/${mm}</span></span>`;
 }
 
 function saveStateHtml(){
@@ -1736,13 +1752,14 @@ function render(){
         ${navBtn('notas', iconDoc(15), 'Notas emitidas', 'Notas')}
         ${navBtn('config', iconGear(15), 'Configurações', 'Config.')}
       </div>
+      ${topoSaudacaoHtml()}
+      ${saveStateHtml()}
       <div class="topbar-right">
         <button class="privacy-toggle ${ui.valuesHidden?'active':''}" type="button" data-action="toggle-privacy" aria-pressed="${ui.valuesHidden}" aria-label="${ui.valuesHidden ? 'Mostrar valores' : 'Ocultar valores'}" title="${ui.valuesHidden ? 'Mostrar valores' : 'Ocultar valores'}">
           <svg class="icon-eye" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" ${ui.valuesHidden?'hidden':''}><path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7-11-7-11-7z"/><circle cx="12" cy="12" r="3"/></svg>
           <svg class="icon-eye-off" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" ${ui.valuesHidden?'':'hidden'}><path d="M17.94 17.94A10.94 10.94 0 0 1 12 20c-7 0-11-8-11-8a21.86 21.86 0 0 1 5.06-6.06M9.9 4.24A10.94 10.94 0 0 1 12 4c7 0 11 8 11 8a21.9 21.9 0 0 1-3.22 4.44M1 1l22 22"/></svg>
         </button>
       </div>
-      ${saveStateHtml()}
     </div>
     ${ui.conflito ? renderConflito() : ''}
     ${painel ? renderPainel() : `
@@ -1766,7 +1783,7 @@ function render(){
 function renderRail(){
   let html = '<div class="rail">';
   html += `<div class="rail-slide-pill"></div>`;
-  html += `<div class="rail-group-label">Clientes</div>`;
+  html += `<div class="rail-group-label">Clientes · em aberto</div>`;
   state.clientOrder.forEach(id=>{
     const c = clientById(id);
     if(!c) return;
@@ -1774,6 +1791,7 @@ function renderRail(){
     html += `<button class="tab-btn ${active?'active':''}" data-action="switch-tab" data-tab="${esc(id)}">
       <span class="tab-chip ${chipClass(id)}">${esc(siglaDe(id))}</span>
       <span class="tab-label">${esc(c.nome)}</span>
+      <span class="tab-val sensitive">R$ ${fmtCurto(monthTotal(id, periodoAberto(id)))}</span>
     </button>`;
   });
   html += `<div class="rail-divider"></div>`;
@@ -1976,42 +1994,49 @@ function renderClientPanel(clientId){
     rowsHtml += `</tbody></table></div>`;
   }
 
-  const addBtn = `<button class="add-row-btn${ui.ordemDesc?' add-topo':''}" data-action="add-video" data-client="${esc(clientId)}" data-ym="${esc(ym)}">+ ${isEsp?'adicionar lançamento':'adicionar vídeo'}</button>`;
+  const addAttrs = `data-action="add-video" data-client="${esc(clientId)}" data-ym="${esc(ym)}"`;
+  const addTxt = isEsp ? 'adicionar lançamento' : 'adicionar vídeo';
   const desdeP = inicioPeriodo(clientId, ym);
   const mesNome = MES_NOME[view.month];
+  // periodo aberto = linha fina embaixo do nome; periodo fechado = faixa inteira (tem botao e avisos)
+  const statusP = periodoStatusHtml(clientId, ym, total);
+  const statusLinha = statusP.includes('periodo-info') ? statusP : '';
+  const statusFaixa = statusLinha ? '' : statusP;
   return `
     <div class="lc-card lc-head">
       <div class="lc-cli">
         <span class="lc-chip ${chipClass(clientId)}">${esc(siglaDe(clientId))}</span>
-        <div class="lc-nome"><div class="panel-title">${esc(c.nome)}${isEsp?' <span class="tipo-badge">esporádico</span>':''}</div></div>
-        <div class="year-switch lc-ano">
-          <button data-action="year-step" data-client="${esc(clientId)}" data-dir="-1" aria-label="Ano anterior">‹</button>
-          <span>${view.year}</span>
-          <button data-action="year-step" data-client="${esc(clientId)}" data-dir="1" aria-label="Próximo ano">›</button>
-        </div>
+        <div class="lc-nome"><div class="panel-title">${esc(c.nome)}${isEsp?' <span class="tipo-badge">esporádico</span>':''}</div>${statusLinha}</div>
       </div>
-      ${periodoStatusHtml(clientId, ym, total)}
-    </div>
-    <div class="lc-stats">
-      <div class="lc-st lc-st-g"><small>Neste período</small><b class="sensitive">R$ ${fmtBRL(total)}</b><span>${mesNome}${desdeP ? ` · desde ${ddmm(desdeP)}` : ''}</span></div>
-      <div class="lc-st lc-st-l"><small>No ano</small><b class="sensitive">R$ ${fmtBRL(clientYearTotal(clientId, view.year))}</b><span>${view.year}</span></div>
-      <div class="lc-st lc-st-s"><small>Lançamentos</small><b>${rows.length}</b><span>${isEsp?'no período':'vídeos no período'}</span></div>
+      <div class="lc-stats">
+        <div class="lc-st lc-st-g"><small>Neste período${desdeP ? ` · desde ${ddmm(desdeP)}` : ''}</small><b class="sensitive">R$ ${fmtBRL(total)}</b></div>
+        <div class="lc-st lc-st-l"><small>No ano de ${view.year}</small><b class="sensitive">R$ ${fmtBRL(clientYearTotal(clientId, view.year))}</b></div>
+        <div class="lc-st lc-st-s"><small>${isEsp?'Lançamentos':'Vídeos'} no período</small><b>${rows.length}</b></div>
+      </div>
+      <div class="year-switch lc-ano">
+        <button data-action="year-step" data-client="${esc(clientId)}" data-dir="-1" aria-label="Ano anterior">‹</button>
+        <span>${view.year}</span>
+        <button data-action="year-step" data-client="${esc(clientId)}" data-dir="1" aria-label="Próximo ano">›</button>
+      </div>
+      ${statusFaixa}
     </div>
     <div class="lc-card lc-meses">
       <div class="lc-mh"><small>Meses de ${view.year}</small><span>altura = quanto faturou</span></div>
       ${monthsHtml}
     </div>
     <div class="lc-card lc-lista">
-      <div class="lc-mh"><small>${isEsp?'Lançamentos':'Vídeos'} de ${mesNome.toLowerCase()}</small><span>total <b class="sensitive">R$ ${fmtBRL(total)}</b></span></div>
-      <div class="action-bar action-top">
-        <button class="btn primary" data-action="gerar-pdf" data-client="${esc(clientId)}" data-ym="${esc(ym)}" ${rows.length===0?'disabled':''}>Gerar relatório PDF</button>
-        ${fecharPeriodoHtml(clientId, ym, rows, total)}
-        ${rows.length>1 ? `<button type="button" class="ordem-btn${ui.ordemDesc?' desc':''}" data-action="virar-lista" aria-pressed="${ui.ordemDesc}"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 5v14M6 13l6 6 6-6"/></svg>${ui.ordemDesc?'Mais recentes primeiro':'Mais antigos primeiro'}</button>` : ''}
+      <div class="lc-topo">
+        <h2 class="lc-tit">${isEsp?'Lançamentos':'Vídeos'} de ${mesNome.toLowerCase()}</h2><span class="lc-tot">total <b class="sensitive">R$ ${fmtBRL(total)}</b></span>
+        <div class="action-bar action-top">
+          ${rows.length>1 ? `<button type="button" class="ordem-btn${ui.ordemDesc?' desc':''}" data-action="virar-lista" aria-pressed="${ui.ordemDesc}"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 5v14M6 13l6 6 6-6"/></svg>${ui.ordemDesc?'Mais recentes primeiro':'Mais antigos primeiro'}</button>` : ''}
+          <button class="btn" data-action="gerar-pdf" data-client="${esc(clientId)}" data-ym="${esc(ym)}" ${rows.length===0?'disabled':''}>Gerar relatório PDF</button>
+          ${fecharPeriodoHtml(clientId, ym, rows, total)}
+          <button class="btn acao" ${addAttrs}>+ ${addTxt.charAt(0).toUpperCase()+addTxt.slice(1)}</button>
+        </div>
       </div>
-      ${ui.ordemDesc ? addBtn : ''}
       ${rowsHtml}
       <div class="table-foot">
-        ${ui.ordemDesc ? '<span></span>' : addBtn}
+        ${ui.ordemDesc ? '<span></span>' : `<button class="add-row-btn" ${addAttrs}>+ ${addTxt}</button>`}
         <div class="month-total">Total do período: <b class="sensitive">R$ ${fmtBRL(total)}</b></div>
       </div>
     </div>
@@ -3557,10 +3582,10 @@ function esqueletoHtml(){
   const nav = (ic, t, on) => `<span class="${on?'on':''}">${ic}<span>${t}</span></span>`;
   return `<div class="off-app" aria-hidden="true">
     <div class="off-topo">
-      <div class="off-marca"><span class="off-mic">${RITMO_ICONE_ANIM}</span><div><span class="tr-wm">ritmo<i>.</i></span><span class="tr-slo">sua produção, no ritmo certo</span></div></div>
+      <div class="off-marca"><span class="off-mic">${RITMO_ICONE_ANIM}</span><span class="tr-wm">ritmo<i>.</i></span></div>
       <div class="off-nav">${nav(iconChart(), 'Painel', true)}${nav(iconList(), 'Lançamentos')}${nav(iconOrc(15), 'Orçamentos')}${nav(iconDoc(15), 'Notas emitidas')}${nav(iconGear(15), 'Configurações')}</div>
     </div>
-    <div class="off-grade">${cartao('Faturado no ano')}${cartao('Limite MEI')}${cartao('Meta do mês')}</div>
+    <div class="off-grade">${cartao('Meta do mês')}${cartao('Hoje')}${cartao('Esta semana')}</div>
     <div class="off-card off-largo"><span class="off-lbl">A cobrar</span>${linha('38%')}${linha('30%')}${linha('44%')}</div>
   </div>`;
 }
@@ -3615,8 +3640,18 @@ async function boot(){
   // o aparelho ja sabe que esta sem rede: aviso na hora (a busca na nuvem
   // tenta varias vezes e levaria ~30s pra desistir). Nada e lido nem gravado.
   if(navigator.onLine === false){ mostrarSemConexao(); return; }
+  // Pre-visualizacao do desenho (so no servidor local com VITE_NUVEM_FALSA=1):
+  // troca a nuvem por uma de mentira, na memoria da aba, com dados inventados,
+  // e pula o login. No app publicado `import.meta.env.DEV` e false e este
+  // bloco inteiro (com o arquivo dos dados falsos) fica de fora do build.
+  let previaFalsa = false;
+  if(import.meta.env.DEV && import.meta.env.VITE_NUVEM_FALSA === '1'){
+    const m = await import('./dev/nuvemFalsa.js');
+    window.storage = m.criarNuvemFalsa(STORAGE_KEY);
+    previaFalsa = true;
+  }
   // Porteiro: sem login, nada e lido nem gravado — so aparece a tela de entrada.
-  if(LOGIN_OBRIGATORIO){
+  if(LOGIN_OBRIGATORIO && !previaFalsa){
     const r = await Promise.race([
       sessaoAtual(supabase),
       new Promise(res => setTimeout(() => res({falhou: true}), 10000))
