@@ -1298,23 +1298,31 @@ function painelMeta(ym){
   // `nums` = os dois numeros grandes do pe (falta / por dia); nos outros casos fica a frase
   let pill, msg, footR, paceHtml = '', nums = '';
   if(ehAtual){
-    const dia = now.getDate(), dim = diasNoMes(REAL_YEAR, REAL_MONTH), left = dim-dia;
-    const pace = dia/dim*100;
+    // escala 5x2: o Joel trabalha de segunda a sexta (feriado no meio da
+    // semana conta). Ritmo, marcador e "por dia" contam esses dias; sábado e
+    // domingo aparecem só como alternativa, embaixo.
+    const dia = now.getDate();
+    const T = P.diasDeTrabalho(REAL_YEAR, REAL_MONTH, dia);
+    const sem = now.getDay(), hojeUtil = sem >= 1 && sem <= 5;
+    const feitosUteis = T.uteisAntes + (hojeUtil ? 1 : 0);
+    const pace = T.uteis ? feitosUteis/T.uteis*100 : dia/T.dim*100;
     paceHtml = `<div class="pace" style="left:${pace.toFixed(1)}%"></div>`;
-    footR = `dia ${dia} de ${dim}`;
+    footR = `dia útil ${feitosUteis} de ${T.uteis}`;
     if(falta <= 0){
       pill = `<span class="pill done">Meta batida</span>`;
       msg = `Você passou a meta em <b class="sensitive">R$ ${fmtBRL(-falta)}</b>. Tudo que entrar agora é extra.`;
     } else {
-      // ritmo esperado conta so os dias que ja terminaram — no dia 1 de manha,
-      // com R$ 0, ainda nao da pra estar "atras"
-      const ritmo = (dia-1)/dim*100;
+      // ritmo esperado conta so os dias uteis que ja terminaram — na segunda
+      // de manha, com R$ 0, ainda nao da pra estar "atras"
+      const ritmo = T.uteis ? T.uteisAntes/T.uteis*100 : (dia-1)/T.dim*100;
       pill = pct >= ritmo-2 ? `<span class="pill ok">No ritmo</span>` : `<span class="pill warn">Um pouco atrás</span>`;
-      if(left > 0){
-        nums = `<div class="mn"><b class="sensitive">R$ ${fmtBRL(falta)}</b><span>faltam, em ${plural(left,'dia','dias')}</span></div>
-          <div class="mn"><b class="sensitive">R$ ${fmtBRL(falta/left)}</b><span>por dia pra chegar lá</span></div>`;
+      const fds = T.corridosAPartir - T.uteisAPartir; // sábados e domingos que sobram
+      if(T.uteisAPartir > 0){
+        nums = `<div class="mn"><b class="sensitive">R$ ${fmtBRL(falta)}</b><span>faltam pra meta</span></div>
+          <div class="mn"><b class="sensitive">R$ ${fmtBRL(falta/T.uteisAPartir)}</b><span>por dia, de segunda a sexta · ${plural(T.uteisAPartir,'dia útil','dias úteis')}${hojeUtil ? ' contando hoje' : ''}</span></div>
+          ${fds > 0 ? `<p class="mn-fds">Se trabalhar também sábado e domingo: <b class="sensitive">R$ ${fmtBRL(falta/T.corridosAPartir)}</b> por dia (${plural(T.corridosAPartir,'dia','dias')}).</p>` : ''}`;
       } else {
-        msg = `Faltam <b class="sensitive">R$ ${fmtBRL(falta)}</b> e o mês termina hoje.`;
+        msg = `Faltam <b class="sensitive">R$ ${fmtBRL(falta)}</b> e não sobra nenhum dia de segunda a sexta neste mês. Trabalhando no fim de semana: <b class="sensitive">R$ ${fmtBRL(falta/T.corridosAPartir)}</b> por dia.`;
       }
     }
   } else {

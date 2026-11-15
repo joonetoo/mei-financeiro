@@ -200,3 +200,21 @@ export function devolverNotaPraGaveta(st, id, mov){
   if(Array.isArray(st.notasYears) && !st.notasYears.includes(mov.de)){ st.notasYears.push(mov.de); st.notasYears.sort(); }
   return true;
 }
+
+/* ---------------- dias de trabalho do mês (escala 5x2) ---------------- */
+// O Joel trabalha de segunda a sexta (feriado no meio da semana conta: ele
+// trabalha). `mes` vai de 1 a 12. Devolve quantos dias o mês tem no total,
+// quantos sao de segunda a sexta, e — a partir de `dia` (contando o proprio
+// dia) — quantos ainda faltam de cada tipo e quantos uteis ja passaram.
+export function diasDeTrabalho(ano, mes, dia = 1){
+  const dim = new Date(Number(ano), Number(mes), 0).getDate();
+  let uteis = 0, uteisAPartir = 0, corridosAPartir = 0, uteisAntes = 0;
+  for(let d = 1; d <= dim; d++){
+    const sem = new Date(Number(ano), Number(mes) - 1, d).getDay(); // 0 dom, 6 sab
+    const util = sem >= 1 && sem <= 5;
+    if(util) uteis++;
+    if(d >= dia){ corridosAPartir++; if(util) uteisAPartir++; }
+    else if(util) uteisAntes++;
+  }
+  return { dim, uteis, uteisAPartir, corridosAPartir, uteisAntes };
+}

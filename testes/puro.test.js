@@ -371,3 +371,31 @@ test('nota com id repetido em duas gavetas nao e movida', () => {
   assert.equal(s.notas['2031'].length, 1);
   assert.equal(s.notas['2032'].length, 1);
 });
+
+/* ---------- dias de trabalho (segunda a sexta) ---------- */
+import { diasDeTrabalho } from '../src/puro.js';
+test('diasDeTrabalho: novembro de 2026 tem 21 dias de segunda a sexta', () => {
+  const d = diasDeTrabalho(2026, 11, 1);
+  assert.equal(d.dim, 30);
+  assert.equal(d.uteis, 21);
+  assert.equal(d.uteisAPartir, 21);
+  assert.equal(d.corridosAPartir, 30);
+  assert.equal(d.uteisAntes, 0);
+});
+test('diasDeTrabalho: contando a partir de um domingo (15/11/2026)', () => {
+  const d = diasDeTrabalho(2026, 11, 15);
+  assert.equal(d.corridosAPartir, 16);   // 15 a 30
+  assert.equal(d.uteisAPartir, 11);      // 16-20, 23-27, 30
+  assert.equal(d.uteisAntes, 10);        // 2-6, 9-13
+});
+test('diasDeTrabalho: contando a partir de uma sexta inclui a propria sexta', () => {
+  const d = diasDeTrabalho(2026, 11, 13);
+  assert.equal(d.uteisAPartir, 12);      // 13, 16-20, 23-27, 30
+  assert.equal(d.uteisAntes, 9);         // 2-6, 9-12
+});
+test('diasDeTrabalho: fevereiro de 2026 tem 20, e o ultimo dia num sabado da 0 uteis restantes', () => {
+  assert.equal(diasDeTrabalho(2026, 2, 1).uteis, 20);
+  const d = diasDeTrabalho(2026, 2, 28);
+  assert.equal(d.uteisAPartir, 0);
+  assert.equal(d.corridosAPartir, 1);
+});
