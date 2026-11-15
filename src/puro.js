@@ -208,13 +208,13 @@ export function devolverNotaPraGaveta(st, id, mov){
 // dia) — quantos ainda faltam de cada tipo e quantos uteis ja passaram.
 export function diasDeTrabalho(ano, mes, dia = 1){
   const dim = new Date(Number(ano), Number(mes), 0).getDate();
-  let uteis = 0, uteisAPartir = 0, corridosAPartir = 0, uteisAntes = 0;
+  let uteis = 0, uteisAPartir = 0, corridosAPartir = 0, uteisAntes = 0, sabadosAPartir = 0;
   for(let d = 1; d <= dim; d++){
     const sem = new Date(Number(ano), Number(mes) - 1, d).getDay(); // 0 dom, 6 sab
     const util = sem >= 1 && sem <= 5;
     if(util) uteis++;
-    if(d >= dia){ corridosAPartir++; if(util) uteisAPartir++; }
+    if(d >= dia){ corridosAPartir++; if(util) uteisAPartir++; if(sem === 6) sabadosAPartir++; }
     else if(util) uteisAntes++;
   }
-  return { dim, uteis, uteisAPartir, corridosAPartir, uteisAntes };
+  return { dim, uteis, uteisAPartir, corridosAPartir, uteisAntes, sabadosAPartir };
 }

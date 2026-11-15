@@ -1250,31 +1250,8 @@ function painelMeta(ym){
     const ab = abertosDoMes(ant);
     if(ab.length) lembrete = `<button type="button" class="meta-lembra" data-action="meta-mes" data-dir="-1">${MES_NOME[ant.split('-')[1]]} ainda recebendo: ${esc(listaNomes(ab.map(nomeCurto)))} em aberto ›</button>`;
   }
-  // vídeos FEITOS neste mês (pela data) mas lançados na aba de um mês
-  // anterior: contam na meta daquele mês, não aqui. Mostra quanto e onde.
-  const fora = {v:0, n:0, clientes:[], abas:{}};
-  state.clientOrder.forEach(cid=>{
-    Object.entries(state.videos[cid]||{}).forEach(([aba, rows])=>{
-      if(!(aba < ym) || !MES_NOME[aba.slice(5)]) return;
-      (rows||[]).forEach(r=>{
-        if(!r || !r.data || r.data.slice(0,7)!==ym) return;
-        fora.v += parseBRL(r.valor); fora.n += 1;
-        fora.abas[aba] = true;
-        if(!fora.clientes.includes(cid)) fora.clientes.push(cid);
-      });
-    });
-  });
-  if(fora.n && fora.v > 0){
-    const abaFora = Object.keys(fora.abas).sort().pop();
-    const nmFora = MES_NOME[abaFora.slice(5)].toLowerCase();
-    const metaFora = metaDoMes(abaFora);
-    const fatFora = Object.values(producaoDoMes(abaFora)).reduce((s,e)=>s+e.v, 0);
-    const fechou = !abertosDoMes(abaFora).length;
-    const resumo = metaFora
-      ? ` ${MES_NOME[abaFora.slice(5)]} ${fechou ? 'fechou' : 'está'} com <span class="sensitive">R$ ${fmtBRL(fatFora)}</span> de <span class="sensitive">R$ ${fmtBRL(metaFora)}</span>.`
-      : '';
-    lembrete += `<button type="button" class="meta-fora" data-action="meta-mes" data-dir="${-ymDiff(ym, abaFora)}">Fora daqui: <b class="sensitive">R$ ${fmtBRL(fora.v)}</b> feitos em ${mesNome} foram ${Object.keys(fora.abas).length>1 ? 'pra abas de meses anteriores' : `na aba de ${nmFora}`} (${plural(fora.n,'vídeo','vídeos')}, ${esc(listaNomes(fora.clientes.map(nomeCurto)))}).${resumo} ›</button>`;
-  }
+  // (o aviso "Fora daqui" — feitos neste mês mas lançados na aba do mês
+  // anterior — saiu a pedido do Joel em 2026-11-15)
   const avisos = lembrete ? `<div class="meta-avisos">${lembrete}</div>` : '';
   if(ui.metaEditing){
     return `<div class="card card-meta s6">${head()}
@@ -1316,13 +1293,15 @@ function painelMeta(ym){
       // de manha, com R$ 0, ainda nao da pra estar "atras"
       const ritmo = T.uteis ? T.uteisAntes/T.uteis*100 : (dia-1)/T.dim*100;
       pill = pct >= ritmo-2 ? `<span class="pill ok">No ritmo</span>` : `<span class="pill warn">Um pouco atrás</span>`;
-      const fds = T.corridosAPartir - T.uteisAPartir; // sábados e domingos que sobram
+      const comSab = T.uteisAPartir + T.sabadosAPartir; // domingo ele não trabalha
       if(T.uteisAPartir > 0){
         nums = `<div class="mn"><b class="sensitive">R$ ${fmtBRL(falta)}</b><span>faltam pra meta</span></div>
           <div class="mn"><b class="sensitive">R$ ${fmtBRL(falta/T.uteisAPartir)}</b><span>por dia, de segunda a sexta · ${plural(T.uteisAPartir,'dia útil','dias úteis')}${hojeUtil ? ' contando hoje' : ''}</span></div>
-          ${fds > 0 ? `<p class="mn-fds">Se trabalhar também sábado e domingo: <b class="sensitive">R$ ${fmtBRL(falta/T.corridosAPartir)}</b> por dia (${plural(T.corridosAPartir,'dia','dias')}).</p>` : ''}`;
+          ${T.sabadosAPartir > 0 ? `<p class="mn-fds">Se trabalhar também no sábado: <b class="sensitive">R$ ${fmtBRL(falta/comSab)}</b> por dia (${plural(comSab,'dia','dias')}).</p>` : ''}`;
       } else {
-        msg = `Faltam <b class="sensitive">R$ ${fmtBRL(falta)}</b> e não sobra nenhum dia de segunda a sexta neste mês. Trabalhando no fim de semana: <b class="sensitive">R$ ${fmtBRL(falta/T.corridosAPartir)}</b> por dia.`;
+        msg = T.sabadosAPartir > 0
+          ? `Faltam <b class="sensitive">R$ ${fmtBRL(falta)}</b> e não sobra nenhum dia de segunda a sexta neste mês. Trabalhando no sábado: <b class="sensitive">R$ ${fmtBRL(falta/T.sabadosAPartir)}</b>.`
+          : `Faltam <b class="sensitive">R$ ${fmtBRL(falta)}</b> e o mês já não tem mais dia de trabalho.`;
       }
     }
   } else {

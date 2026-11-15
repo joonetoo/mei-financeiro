@@ -387,6 +387,7 @@ test('diasDeTrabalho: contando a partir de um domingo (15/11/2026)', () => {
   assert.equal(d.corridosAPartir, 16);   // 15 a 30
   assert.equal(d.uteisAPartir, 11);      // 16-20, 23-27, 30
   assert.equal(d.uteisAntes, 10);        // 2-6, 9-13
+  assert.equal(d.sabadosAPartir, 2);     // 21 e 28
 });
 test('diasDeTrabalho: contando a partir de uma sexta inclui a propria sexta', () => {
   const d = diasDeTrabalho(2026, 11, 13);
@@ -398,4 +399,5 @@ test('diasDeTrabalho: fevereiro de 2026 tem 20, e o ultimo dia num sabado da 0 u
   const d = diasDeTrabalho(2026, 2, 28);
   assert.equal(d.uteisAPartir, 0);
   assert.equal(d.corridosAPartir, 1);
+  assert.equal(d.sabadosAPartir, 1);
 });
